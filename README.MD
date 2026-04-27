@@ -97,7 +97,7 @@ Most changes are exposed in config.ini and can be tuned.
 
 ### Educated
 
-* Now grants +5% Skill XP gain, but only if `Intelligence` ≥ 5.
+* Now grants +5% Skill XP gain, but only if `Intelligence` ≥ 6.
 
 ### Mastermind (Heroic)
 
