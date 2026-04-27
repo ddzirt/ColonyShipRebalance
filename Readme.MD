@@ -35,22 +35,24 @@ If you are using a custom mod location or need to verify loading:
 
 ## Feat Rebalance - Balance Changes Summary
 
+Most changes are exposed in config.ini and can be tuned.
+
 ### Lone Wolf
 
 * Evasion increased from +12 to +16.
 * Initiative increased from +16 to +20.
-* Added +4 Armor Penalty reduction.
+* Added +4 `Armor Handling`.
 
 ### Warrior
 
-* Additionally grants armor penalty reduction equal to (Melee Skill Level × 1), defaulting to +1 per level.
+* Additionally grants `Armor Handling` equal to (Melee Skill Level × 1), defaulting to +1 per level.
 
 ### Berserker
 
 * HP above 50%: no bonus.
 * HP ≤ 50%: +1 min and max melee damage.
 * HP ≤ 25%: +2 min and max melee damage.
-* At 13 HP or below, the vanilla +2 bonus applies (no additional mod bonus).
+* At 13 HP or below, the vanilla +2 bonus applies (no additional mod bonus). Might add +1 here.
 
 ### Juggernaut (Heroic)
 
@@ -100,7 +102,6 @@ If you are using a custom mod location or need to verify loading:
 
 ### Gifted (Heroic)
 
-* Retains +4 stat points and +4 skill points at creation.
 * Additionally grants +5% Skill XP gain.
 
 ### Healing Factor (Heroic)
