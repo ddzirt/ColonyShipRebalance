@@ -224,7 +224,7 @@ HookFeat("/Game/Gameplay/Feats/F_LoneWolf.F_LoneWolf_C",
 -- ============================================================
 -- WARRIOR
 -- Vanilla: THC and CSC bonuses per melee skill level
--- Addition: +ArmorPenalty per skill level (armor becomes usable
+-- Addition: +ArmorHandling named ArmorPenalty in code per skill level (armor becomes usable
 --           without needing STR 10 Juggernaut)
 -- Config: WARRIOR_ARMOR_PER_LEVEL
 -- ============================================================
@@ -249,7 +249,7 @@ HookFeat("/Game/Gameplay/Feats/F_Warrior.F_Warrior_C",
         local bonus = skillLevel * cfg("WARRIOR_ARMOR_PER_LEVEL", 1)
         -- Set directly, not additive, to avoid stacking across recalculations
         Set(ref, F.ArmorPenalty, bonus)
-        Log("Warrior: ArmorPenalty set to " .. bonus)
+        Log("Warrior: ArmorHandling set to " .. bonus)
     end
 )
 
@@ -292,7 +292,7 @@ HookFeat("/Game/Gameplay/Feats/F_Berserker.F_Berserker_C",
 
 -- ============================================================
 -- BASHER (blunt weapons)
--- Vanilla: aimed attack bonus
+-- Vanilla: penetration
 -- Rebalanced: blunt accuracy + knockdown + aimed THC per skill level
 -- Config: BASHER_THC, BASHER_KNOCKDOWN, BASHER_AIMED_PER_LEVEL
 -- ============================================================
@@ -324,7 +324,7 @@ HookFeat("/Game/Gameplay/Feats/F_Basher.F_Basher_C",
 
 -- ============================================================
 -- BUTCHER (bladed weapons)
--- Vanilla: penetration bonus
+-- Vanilla: aimed bonus
 -- Rebalanced: bladed accuracy + crit chance + penetration per skill level
 -- Config: BUTCHER_THC, BUTCHER_CSC, BUTCHER_PEN_PER_LEVEL
 -- ============================================================
@@ -396,8 +396,8 @@ HookFeat("/Game/Gameplay/Feats/F_H_Juggernaut.F_H_Juggernaut_C",
 
 -- ============================================================
 -- FAST RUNNER
--- Vanilla: +4 Initiative when move on turn
--- Addition: +6 Evasion (same condition)
+-- Addition: +6 Evasion
+-- Config: FR_EVASION
 -- ============================================================
 HookFeat("/Game/Gameplay/Feats/F_FastRunner.F_FastRunner_C",
     "Get Conditional Effects",
@@ -405,14 +405,15 @@ HookFeat("/Game/Gameplay/Feats/F_FastRunner.F_FastRunner_C",
         local ref = GetEffects(Effects)
         if not ref or not IsConditionMet(IsValid) then return end
 
-        Set(ref, F.Evasion, cfg("FASTRUNNER_EVASION", 6))
-        Log("FastRunner: +6 Evasion applied")
+        Set(ref, F.Evasion, cfg("FR_EVASION", 6))
+        Log("FastRunner: +" .. cfg("FR_EVASION", 6) .. " Evasion applied")
     end
 )
 
 -- ============================================================
 -- GLADIATOR
 -- Addition: flat +1 min/max melee damage
+-- Config: GLADIATOR_MIN, GLADIATOR_MAX
 -- ============================================================
 HookFeat("/Game/Gameplay/Feats/F_Gladiator.F_Gladiator_C",
     "Get Conditional Effects",
@@ -420,15 +421,16 @@ HookFeat("/Game/Gameplay/Feats/F_Gladiator.F_Gladiator_C",
         local ref = GetEffects(Effects)
         if not ref or not IsConditionMet(IsValid) then return end
 
-        Set(ref, F.MeleeMinDMG, 1)
-        Set(ref, F.MeleeMaxDMG, 1)
-        Log("Gladiator: +1 melee damage applied")
+        Set(ref, F.MeleeMinDMG, cfg("GLADIATOR_MIN", 1))
+        Set(ref, F.MeleeMaxDMG, cfg("GLADIATOR_MAX", 1))
+        Log("Gladiator: +" .. cfg("GLADIATOR_MIN", 1) .. " min dmg +" .. cfg("GLADIATOR_MAX", 1) .. " max dmg applied")
     end
 )
 
 -- ============================================================
 -- HEAVY HITTER
 -- Addition: +1% Crit Chance per 3 Perception
+-- Config: HH_PER
 -- ============================================================
 HookFeat("/Game/Gameplay/Feats/F_HeavyHitter.F_HeavyHitter_C",
     "Get Conditional Effects",
@@ -448,7 +450,8 @@ HookFeat("/Game/Gameplay/Feats/F_HeavyHitter.F_HeavyHitter_C",
             end
         end
 
-        local critBonus = math.floor(perception / 3)
+        local critBonus = math.floor(perception / cfg("HH_PER", 3))
+        critBonus = critBonus * cfg("HH_CRIT_PER_STEP", 1)
         if critBonus > 0 then
             Set(ref, F.CSC, critBonus)
             Log("HeavyHitter: +" .. critBonus .. "% CSC from " .. perception .. " Perception")
@@ -459,6 +462,7 @@ HookFeat("/Game/Gameplay/Feats/F_HeavyHitter.F_HeavyHitter_C",
 -- ============================================================
 -- TOUGH BASTARD
 -- Requirement: Constitution >= 6, otherwise all benefits suppressed
+-- Config: TB_CON
 -- ============================================================
 HookFeat("/Game/Gameplay/Feats/F_ToughBastard.F_ToughBastard_C",
     "Get Conditional Effects",
@@ -478,13 +482,13 @@ HookFeat("/Game/Gameplay/Feats/F_ToughBastard.F_ToughBastard_C",
             end
         end
 
-        if con < 6 then
+        if con < cfg("TB_CON", 6) then
             -- Zero out the feat's bonuses (common fields for Tough Bastard)
             Set(ref, F.NaturalDR, 0)
             Set(ref, F.MaxHP, 0)
-            Log("ToughBastard: CON < 6, bonuses suppressed")
+            Log("ToughBastard: CON <" .. cfg("TB_CON", 6) .. ", bonuses suppressed")
         else
-            Log("ToughBastard: CON >= 6, normal effects active")
+            Log("ToughBastard: CON >= " .. cfg("TB_CON", 6) .. ", normal effects active")
         end
     end
 )
@@ -506,9 +510,11 @@ NotifyOnNewObject("/Game/Gameplay/Feats/BaseTypes/FeatBase.FeatBase_C",
 
                     -- EDUCATED
                     -- Vanilla: retroactive skill LP bonus on feat add (one-time)
-                    -- Addition: persistent +5% SkillXPGain each combat recalc
-                    -- Soft Int>=5 gate: bonus zeroed below threshold
-                    -- Config: EDUCATED_XP_BONUS
+                    -- Addition: persistent +5% SkillXPGain each combat recalc. This is not the way. It has to be added once.
+                    -- Current implementation applies the bonus repeatedly, which might stack or
+                    -- overwrite unintendedly depending on game mechanics – but that is a separate investigation.
+                    -- Soft Int>=6 gate: bonus zeroed below threshold
+                    -- Config: EDUCATED_SXP_BONUS, EDUCATED_INT_MIN
                     if className:find("F_Educated_C") then
                         local ref = GetEffects(Effects)
                         if not ref then return end
@@ -519,40 +525,40 @@ NotifyOnNewObject("/Game/Gameplay/Feats/BaseTypes/FeatBase.FeatBase_C",
                             for _, name in ipairs({ "Intelligence", "Int", "INTEL" }) do
                                 local iOk, iv = pcall(function() return char:GetPropertyValue(name) end)
                                 if iOk and iv and type(iv) == "number" then
-                                    meetsReq = iv >= 5
+                                    meetsReq = iv >= cfg("EDUCATED_INT_MIN", 6)
                                     break
                                 end
                             end
                         end
 
                         if meetsReq then
-                            Set(ref, F.SkillXPGain, cfg("EDUCATED_XP_BONUS", 5))
-                            Log("Educated: +5% SkillXP applied")
+                            Set(ref, F.SkillXPGain, cfg("EDUCATED_SXP_BONUS", 5))
+                            Log("Educated: +" .. cfg("EDUCATED_SXP_BONUS", 5) .. "% SkillXP applied")
                         else
-                            Log("Educated: Int<5, suppressed")
+                            Log("Educated: Int<" .. cfg("EDUCATED_INT_MIN", 6) .. ", suppressed")
                         end
 
                         -- MASTERMIND (Heroic)
                         -- Vanilla: bonus feat levels, Int-gated
                         -- Addition: +5% SkillXPGain to address skill point
                         --           deficit on Str-heavy solo builds
-                        -- Config: MASTERMIND_XP_BONUS
+                        -- Config: MASTERMIND_SXP_BONUS
                     elseif className:find("F_H_Mastermind_C") then
                         local ref = GetEffects(Effects)
                         if not ref then return end
-                        Set(ref, F.SkillXPGain, cfg("MASTERMIND_XP_BONUS", 5))
-                        Log("Mastermind: +5% SkillXP applied")
+                        Set(ref, F.SkillXPGain, cfg("MASTERMIND_SXP_BONUS", 5))
+                        Log("Mastermind: +" .. cfg("MASTERMIND_SXP_BONUS", 5) .. "% SkillXP applied")
 
                         -- GIFTED (Heroic)
                         -- Vanilla: +4 stat points, +4 skill points at creation
                         -- Addition: +5% SkillXPGain (makes ongoing play
                         --           competitive with Mastermind/Educated)
-                        -- Config: GIFTED_SKILL_XP
+                        -- Config: GIFTED_SKILL_SXP
                     elseif className:find("F_Gifted_C") then
                         local ref = GetEffects(Effects)
                         if not ref then return end
-                        Set(ref, F.SkillXPGain, cfg("GIFTED_SKILL_XP", 5))
-                        Log("Gifted: +5% SkillXP applied")
+                        Set(ref, F.SkillXPGain, cfg("GIFTED_SKILL_SXP", 5))
+                        Log("Gifted: +" .. cfg("GIFTED_SKILL_SXP", 5) .. "% SkillXP applied")
                     end
                 end
             )
@@ -589,7 +595,7 @@ NotifyOnNewObject("/Game/Gameplay/Feats/BaseTypes/F_RegenBase.F_RegenBase_C",
                     if not char then return end
 
                     local level = GetCharLevel(char)
-                    local perLevels = cfg("HF_REGEN_PER_LEVELS", 5)
+                    local perLevels = cfg("HF_REGEN_PER_LEVELS", 3)
                     local bonus = math.floor(level / perLevels)
 
                     -- Override vanilla completely; set absolute value
@@ -673,19 +679,20 @@ UpdateFeatDescription("/Game/Gameplay/Feats/F_Warrior.F_Warrior_C",
 
 -- BERSERKER
 UpdateFeatDescription("/Game/Gameplay/Feats/F_Berserker.F_Berserker_C",
-    "HP > 50%: no bonus. HP <= 50%: +1 Melee DMG. HP <= " ..
-    math.floor(cfg("BERSERK_LOW_HP_PCT", 0.25) * 100) ..
-    "%: +2 Melee DMG. At 13 HP or below, vanilla +2 applies.")
+    "HP > " .. math.floor(cfg("BERSERK_MID_HP_PCT", 0.50) * 100) .. "%: no bonus. " ..
+    "HP <= " .. math.floor(cfg("BERSERK_MID_HP_PCT", 0.50) * 100) .. "%: +1 Melee DMG. " ..
+    "HP <= " .. math.floor(cfg("BERSERK_LOW_HP_PCT", 0.25) * 100) .. "%: +2 Melee DMG. " ..
+    "At 13 HP or below, vanilla +2 applies.")
 
 -- BASHER
 UpdateFeatDescription("/Game/Gameplay/Feats/F_Basher.F_Basher_C",
     "Blunt accuracy +" .. cfg("BASHER_THC", 8) .. "%, knockdown +" .. cfg("BASHER_KNOCKDOWN", 20) ..
-    "%, penetration +" .. cfg("BASHER_PEN_PER_LEVEL", 2) .. "% per melee skill level.")
+    "%, Aimed Accuracy +" .. cfg("BASHER_AIMED_PER_LEVEL", 2) .. "% per melee skill level.")
 
 -- BUTCHER
 UpdateFeatDescription("/Game/Gameplay/Feats/F_Butcher.F_Butcher_C",
     "Bladed accuracy +" .. cfg("BUTCHER_THC", 8) .. "%, crit +" .. cfg("BUTCHER_CSC", 20) ..
-    "%, aimed +" .. cfg("BUTCHER_AIMED_PER_LEVEL", 1) .. " per melee skill level.")
+    "%, penetration +" .. cfg("BUTCHER_PEN_PER_LEVEL", 2) .. " per melee skill level.")
 
 -- JUGGERNAUT
 UpdateFeatDescription("/Game/Gameplay/Feats/F_H_Juggernaut.F_H_Juggernaut_C",
@@ -695,7 +702,9 @@ UpdateFeatDescription("/Game/Gameplay/Feats/F_H_Juggernaut.F_H_Juggernaut_C",
 
 -- EDUCATED
 UpdateFeatDescription("/Game/Gameplay/Feats/F_Educated.F_Educated_C",
-    "INT >= 5: +" .. cfg("EDUCATED_XP_BONUS", 5) .. "% Skill XP gain. Also retroactive skill points.")
+    "INT >= " ..
+    cfg("EDUCATED_INT_MIN", 6) ..
+    ": +" .. cfg("EDUCATED_SXP_BONUS", 5) .. "% Skill XP gain. Also retroactive skill points.")
 
 -- MASTERMIND
 UpdateFeatDescription("/Game/Gameplay/Feats/F_H_Mastermind.F_H_Mastermind_C",
@@ -707,23 +716,27 @@ UpdateFeatDescription("/Game/Gameplay/Feats/F_Gifted.F_Gifted_C",
 
 -- HEALING FACTOR
 UpdateFeatDescription("/Game/Gameplay/Feats/F_H_HealingFactor.F_H_HealingFactor_C",
-    "HP regen per turn = floor(character level / " .. cfg("HF_REGEN_PER_LEVELS", 5) .. ").")
+    "HP regen per turn = floor(character level / " .. cfg("HF_REGEN_PER_LEVELS", 3) .. ").")
 
 -- FAST RUNNER
 UpdateFeatDescription("/Game/Gameplay/Feats/F_FastRunner.F_FastRunner_C",
-    "+6 AP to movement, Initiative +24, disables enemy Reaction, Evasion skill gain +100%. Additionally grants +6 Evasion.")
+    "+6 AP to movement, Initiative +24, disables enemy Reaction, Evasion skill gain +100%. Additionally grants +" ..
+    cfg("FR_EVASION", 6) .. " Evasion.")
 
 -- GLADIATOR
 UpdateFeatDescription("/Game/Gameplay/Feats/F_Gladiator.F_Gladiator_C",
-    "The gladiator deals a little more damage. (+1 min/max melee damage)")
+    "The gladiator deals a little more damage. (+" ..
+    cfg("GLADIATOR_MIN", 1) .. " min and +" ..
+    cfg("GLADIATOR_MAX", 1) .. " max melee damage)")
 
 -- HEAVY HITTER
 UpdateFeatDescription("/Game/Gameplay/Feats/F_HeavyHitter.F_HeavyHitter_C",
-    "+1% Crit Chance for every 3 Perception.")
+    "+" .. cfg("HH_CRIT_PER_STEP", 1) .. "% Crit Chance for every " .. cfg("HH_PER", 3) .. " Perception.")
 
 -- TOUGH BASTARD
 UpdateFeatDescription("/Game/Gameplay/Feats/F_ToughBastard.F_ToughBastard_C",
-    "Requires CON >= 6. If requirement not met, all bonuses are suppressed.")
+    "Requires CON >= " ..
+    cfg("TB_CON", 6) .. ". If requirement not met, all bonuses are suppressed.")
 
 -- ============================================================
 -- CONSOLE COMMANDS FOR TESTING
