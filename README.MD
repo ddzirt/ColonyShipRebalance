@@ -15,8 +15,9 @@ This mod requires **UE4SS** (Unreal Engine 4 Scripting System) to function.
 
 ### 1. Install Mod Files
 
-1. Download and extract this mod archive.
-2. Move the mod folder into the UE4SS mods directory:
+1. Download and extract this via `CODE` button.
+2. Create a folder with name Rebalance and extract Scripts folder into it.
+3. Move the mod(Rebalance) folder into the UE4SS mods directory:
    `Colony Ship/ColonyShip/Binaries/Win64/Mods/`
 
 ### 2. Configure UE4SS-settings.ini (Optional)
@@ -39,8 +40,8 @@ Most changes are exposed in config.ini and can be tuned.
 
 ### Lone Wolf
 
-* Evasion increased from +12 to +16.
-* Initiative increased from +16 to +20.
+* `Evasion` increased from +12 to +16.
+* `Initiative` increased from +16 to +20.
 * Added +4 `Armor Handling`.
 
 ### Warrior
@@ -49,16 +50,16 @@ Most changes are exposed in config.ini and can be tuned.
 
 ### Berserker
 
-* HP above 50%: no bonus.
-* HP ≤ 50%: +1 min and max melee damage.
-* HP ≤ 25%: +2 min and max melee damage.
+* `HP` above 50%: no bonus.
+* `HP` ≤ 50%: +1 min and max melee damage.
+* `HP` ≤ 25%: +2 min and max melee damage.
 * At 13 HP or below, the vanilla +2 bonus applies (no additional mod bonus). Might add +1 here.
 
 ### Juggernaut (Heroic)
 
-* HP above 50%: +1 Natural DR.
-* HP ≤ 50%: +2 Natural DR.
-* HP ≤ 25%: +3 Natural DR.
+* `HP` above 50%: +1 Natural DR.
+* `HP` ≤ 50%: +2 Natural DR.
+* `HP` ≤ 25%: +3 Natural DR.
 * At 13 HP or below, vanilla handles its own +4 DR (no extra).
 
 ### Basher (blunt weapons)
@@ -71,13 +72,13 @@ Most changes are exposed in config.ini and can be tuned.
 ### Butcher (bladed weapons)
 
 * Removed vanilla aimed attack bonus.
-* Added +8% Melee THC.
-* Added +20% Carve Critical Chance.
-* Added +2% Penetration per Melee Skill Level.
+* Added +8% Melee `THC`.
+* Added +20% `Carve Critical Chance`.
+* Added +2% `Penetration` per Melee Skill Level.
 
 ### Fast Runner
 
-* Additionally grants +6 Evasion.
+* Additionally grants +6 `Evasion`.
 
 ### Gladiator
 
@@ -85,16 +86,18 @@ Most changes are exposed in config.ini and can be tuned.
 
 ### Heavy Hitter
 
-* Additionally grants +1% Critical Strike Chance per 3 points of Perception.
+* Additionally grants +1% `Critical Strike Chance` per 3 points of `Perception`.
 
 ### Tough Bastard
 
-* Requires Constitution ≥ 6 to gain any bonuses.
+* Requires `Constitution` ≥ 6 to gain any bonuses.
 * If CON < 6, all benefits (DR, HP bonus) are suppressed.
+* We'll see if I can remove feat from selection list instead.
+* Or split DR and HP bonus to this condition.
 
 ### Educated
 
-* Now grants +5% Skill XP gain, but only if Intelligence ≥ 5.
+* Now grants +5% Skill XP gain, but only if `Intelligence` ≥ 5.
 
 ### Mastermind (Heroic)
 
