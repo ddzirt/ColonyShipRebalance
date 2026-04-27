@@ -692,34 +692,6 @@ SetFeatDescription("/Game/Gameplay/Feats/F_HeavyHitter.F_HeavyHitter_C",
 SetFeatDescription("/Game/Gameplay/Feats/F_ToughBastard.F_ToughBastard_C",
     "Requires CON >= 6. If requirement not met, all bonuses are suppressed.")
 
-
--- -- ============================================================
--- -- MOD DESCRIPTION (description.txt)
--- -- ============================================================
--- local function CreateModDescription()
---     local f = io.open(SCRIPT_PATH .. "description.txt", "w")
---     if not f then return end
---     f:write([[
--- FeatRebalance Mod
-
--- Rebalances all major feats for solo play viability. Includes:
--- - Weapon-specific feats (Basher, Butcher) reworked for blunt / blade identity
--- - Warrior armor penalty reduction per melee skill level
--- - Tiered HP-based feats (Berserker, Juggernaut)
--- - Educated / Mastermind / Gifted: additional SkillXP gain
--- - Healing Factor: scaling HP regen based on character level
--- - Fast Runner: extra Evasion when moving
--- - Gladiator: +1 melee damage
--- - Heavy Hitter: +1% Crit Chance per 3 Perception
--- - Tough Bastard: CON 6 gate
-
--- Configurable via config.ini.
--- ]])
---     f:close()
--- end
-
-CreateModDescription()
-
 -- ============================================================
 -- CONSOLE COMMANDS FOR TESTING
 -- ============================================================
