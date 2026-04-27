@@ -293,10 +293,8 @@ HookFeat("/Game/Gameplay/Feats/F_Berserker.F_Berserker_C",
 -- ============================================================
 -- BASHER (blunt weapons)
 -- Vanilla: aimed attack bonus
--- Rebalanced: blunt accuracy + knockdown chance + penetration
---             per skill level (penetration fits blunt weapon
---             identity better than aimed)
--- Config: BASHER_THC, BASHER_KNOCKDOWN, BASHER_PEN_PER_LEVEL
+-- Rebalanced: blunt accuracy + knockdown + aimed THC per skill level
+-- Config: BASHER_THC, BASHER_KNOCKDOWN, BASHER_AIMED_PER_LEVEL
 -- ============================================================
 HookFeat("/Game/Gameplay/Feats/F_Basher.F_Basher_C",
     "Get Conditional Effects",
@@ -316,20 +314,19 @@ HookFeat("/Game/Gameplay/Feats/F_Basher.F_Basher_C",
             end
         end
 
-        Set(ref, F.AimedTHC, 0)
+        Set(ref, F.PenetrationPct, 0) -- remove any vanilla penetration
         Set(ref, F.MeleeTHC, cfg("BASHER_THC", 8))
         Set(ref, F.KnockdownChance, cfg("BASHER_KNOCKDOWN", 20))
-        Set(ref, F.PenetrationPct, skillLevel * cfg("BASHER_PEN_PER_LEVEL", 2))
-        Log("Basher: applied (pen=" .. skillLevel * cfg("BASHER_PEN_PER_LEVEL", 2) .. ")")
+        Set(ref, F.AimedTHC, skillLevel * cfg("BASHER_AIMED_PER_LEVEL", 2))
+        Log("Basher: applied (aimed=" .. skillLevel * cfg("BASHER_AIMED_PER_LEVEL", 2) .. ")")
     end
 )
 
 -- ============================================================
 -- BUTCHER (bladed weapons)
 -- Vanilla: penetration bonus
--- Rebalanced: bladed accuracy + carve crit chance + aimed
---             per skill level (precision identity for blades)
--- Config: BUTCHER_THC, BUTCHER_CSC, BUTCHER_AIMED_PER_LEVEL
+-- Rebalanced: bladed accuracy + crit chance + penetration per skill level
+-- Config: BUTCHER_THC, BUTCHER_CSC, BUTCHER_PEN_PER_LEVEL
 -- ============================================================
 HookFeat("/Game/Gameplay/Feats/F_Butcher.F_Butcher_C",
     "Get Conditional Effects",
@@ -349,11 +346,11 @@ HookFeat("/Game/Gameplay/Feats/F_Butcher.F_Butcher_C",
             end
         end
 
-        Set(ref, F.PenetrationPct, 0)
+        Set(ref, F.AimedTHC, 0) -- remove any vanilla aimed bonus
         Set(ref, F.MeleeTHC, cfg("BUTCHER_THC", 8))
         Set(ref, F.CSC, cfg("BUTCHER_CSC", 20))
-        Set(ref, F.AimedTHC, skillLevel * cfg("BUTCHER_AIMED_PER_LEVEL", 1))
-        Log("Butcher: applied (aimed=" .. skillLevel * cfg("BUTCHER_AIMED_PER_LEVEL", 1) .. ")")
+        Set(ref, F.PenetrationPct, skillLevel * cfg("BUTCHER_PEN_PER_LEVEL", 2))
+        Log("Butcher: applied (pen=" .. skillLevel * cfg("BUTCHER_PEN_PER_LEVEL", 2) .. ")")
     end
 )
 
@@ -408,7 +405,7 @@ HookFeat("/Game/Gameplay/Feats/F_FastRunner.F_FastRunner_C",
         local ref = GetEffects(Effects)
         if not ref or not IsConditionMet(IsValid) then return end
 
-        Set(ref, F.Evasion, 6)
+        Set(ref, F.Evasion, cfg("FASTRUNNER_EVASION", 6))
         Log("FastRunner: +6 Evasion applied")
     end
 )
@@ -610,124 +607,128 @@ NotifyOnNewObject("/Game/Gameplay/Feats/BaseTypes/F_RegenBase.F_RegenBase_C",
 )
 
 -- ============================================================
--- FEAT DESCRIPTION OVERRIDE
--- Replace in-game feat descriptions with custom text.
+-- DESCRIPTION OVERRIDE
 -- ============================================================
-local function SetFeatDescription(featClass, newDescription)
-    NotifyOnNewObject(featClass, function(feat)
+local function UpdateFeatDescription(classPath, moddedInfo)
+    local function ApplyTo(obj)
+        if not obj or not obj:IsValid() then return end
+
         ExecuteInGameThread(function()
-            local ok, desc = pcall(function()
-                return feat.Description
+            if not obj or not obj:IsValid() then return end
+
+            -- Colony Ship uses specific property names found in your dump:
+            -- 'Description' for the main text
+            -- 'Visible Name' for the header (optional to change)
+            pcall(function()
+                obj.Description = FText(moddedInfo)
+                -- Log success for debugging
+                -- print("[Mod] Updated description for: " .. obj:GetFullName())
             end)
-            if ok and desc then
-                pcall(function()
-                    feat.Description = FText(newDescription)
-                end)
-                Log("Description updated: " .. featClass)
-            else
-                Log("Could not access Description for " .. featClass)
-            end
         end)
+    end
+
+    -- 1. Catch new objects (Feat Selection screen)
+    NotifyOnNewObject(classPath, ApplyTo)
+
+    -- 2. Force Update existing objects (Character Sheet fix)
+    local function ForceRefresh()
+        -- StaticFindObject might return nil if the asset isn't loaded yet
+        local cls = StaticFindObject(classPath)
+        if cls and cls:IsValid() then
+            -- Update the template (CDO)
+            local cdo = cls:GetClassDefaultObject()
+            if cdo then ApplyTo(cdo) end
+
+            -- Update all instances currently held by characters
+            local existing = FindAllOf(cls)
+            if existing then
+                for _, inst in ipairs(existing) do
+                    ApplyTo(inst)
+                end
+            end
+        end
+    end
+
+    -- Run once safely at startup
+    pcall(ForceRefresh)
+
+    -- 3. HOOK THE UI (The "CharAndCreation" widget you found)
+    -- This forces an update whenever the UI widget is constructed
+    local uiPath = "/Game/Gui/Controls/CharAndCreation/FeatInfoWidget.FeatInfoWidget_C"
+    RegisterHook(uiPath .. ":Construct", function()
+        ForceRefresh()
     end)
 end
 
 -- LONE WOLF
-SetFeatDescription("/Game/Gameplay/Feats/F_LoneWolf.F_LoneWolf_C",
+UpdateFeatDescription("/Game/Gameplay/Feats/F_LoneWolf.F_LoneWolf_C",
     "SOLO: +" .. cfg("LW_EVASION", 16) .. " Evasion, +" .. cfg("LW_INITIATIVE", 20) ..
     " Initiative, +" .. cfg("LW_ARMOR_PENALTY", 4) .. " Armor Penalty reduction.")
 
+
 -- WARRIOR
-SetFeatDescription("/Game/Gameplay/Feats/F_Warrior.F_Warrior_C",
+UpdateFeatDescription("/Game/Gameplay/Feats/F_Warrior.F_Warrior_C",
     "Grants melee accuracy bonuses and reduces armor penalty per Melee skill level." ..
     " (+" .. cfg("WARRIOR_ARMOR_PER_LEVEL", 1) .. " Armor Penalty per skill level)")
 
 -- BERSERKER
-SetFeatDescription("/Game/Gameplay/Feats/F_Berserker.F_Berserker_C",
+UpdateFeatDescription("/Game/Gameplay/Feats/F_Berserker.F_Berserker_C",
     "HP > 50%: no bonus. HP <= 50%: +1 Melee DMG. HP <= " ..
     math.floor(cfg("BERSERK_LOW_HP_PCT", 0.25) * 100) ..
     "%: +2 Melee DMG. At 13 HP or below, vanilla +2 applies.")
 
 -- BASHER
-SetFeatDescription("/Game/Gameplay/Feats/F_Basher.F_Basher_C",
+UpdateFeatDescription("/Game/Gameplay/Feats/F_Basher.F_Basher_C",
     "Blunt accuracy +" .. cfg("BASHER_THC", 8) .. "%, knockdown +" .. cfg("BASHER_KNOCKDOWN", 20) ..
     "%, penetration +" .. cfg("BASHER_PEN_PER_LEVEL", 2) .. "% per melee skill level.")
 
 -- BUTCHER
-SetFeatDescription("/Game/Gameplay/Feats/F_Butcher.F_Butcher_C",
+UpdateFeatDescription("/Game/Gameplay/Feats/F_Butcher.F_Butcher_C",
     "Bladed accuracy +" .. cfg("BUTCHER_THC", 8) .. "%, crit +" .. cfg("BUTCHER_CSC", 20) ..
     "%, aimed +" .. cfg("BUTCHER_AIMED_PER_LEVEL", 1) .. " per melee skill level.")
 
 -- JUGGERNAUT
-SetFeatDescription("/Game/Gameplay/Feats/F_H_Juggernaut.F_H_Juggernaut_C",
+UpdateFeatDescription("/Game/Gameplay/Feats/F_H_Juggernaut.F_H_Juggernaut_C",
     "HP > " .. math.floor(cfg("JUGG_MID_HP_PCT", 0.50) * 100) .. "%: +1 DR. HP <= " ..
     math.floor(cfg("JUGG_MID_HP_PCT", 0.50) * 100) .. "%: +2 DR. HP <= " ..
     math.floor(cfg("JUGG_LOW_HP_PCT", 0.25) * 100) .. "%: +3 DR. At 13 HP or below, vanilla +4 applies.")
 
 -- EDUCATED
-SetFeatDescription("/Game/Gameplay/Feats/F_Educated.F_Educated_C",
+UpdateFeatDescription("/Game/Gameplay/Feats/F_Educated.F_Educated_C",
     "INT >= 5: +" .. cfg("EDUCATED_XP_BONUS", 5) .. "% Skill XP gain. Also retroactive skill points.")
 
 -- MASTERMIND
-SetFeatDescription("/Game/Gameplay/Feats/F_H_Mastermind.F_H_Mastermind_C",
+UpdateFeatDescription("/Game/Gameplay/Feats/F_H_Mastermind.F_H_Mastermind_C",
     "Bonus feat levels (INT-gated) plus +" .. cfg("MASTERMIND_SXP_BONUS", 5) .. "% Skill XP gain.")
 
 -- GIFTED
-SetFeatDescription("/Game/Gameplay/Feats/F_Gifted.F_Gifted_C",
+UpdateFeatDescription("/Game/Gameplay/Feats/F_Gifted.F_Gifted_C",
     "+4 stat points, +4 skill points, plus +" .. cfg("GIFTED_SKILL_SXP", 5) .. "% Skill XP gain.")
 
 -- HEALING FACTOR
-SetFeatDescription("/Game/Gameplay/Feats/F_H_HealingFactor.F_H_HealingFactor_C",
-    "HP regen per turn = floor(character level / " .. cfg("HF_REGEN_PER_LEVELS", 5) .. ")." ..
-    " Example: level 10 = +2 HP regen.")
+UpdateFeatDescription("/Game/Gameplay/Feats/F_H_HealingFactor.F_H_HealingFactor_C",
+    "HP regen per turn = floor(character level / " .. cfg("HF_REGEN_PER_LEVELS", 5) .. ").")
 
 -- FAST RUNNER
-SetFeatDescription("/Game/Gameplay/Feats/F_FastRunner.F_FastRunner_C",
-    "When moving on your turn: +4 Initiative (vanilla) and +6 Evasion (rebalance).")
+UpdateFeatDescription("/Game/Gameplay/Feats/F_FastRunner.F_FastRunner_C",
+    "+6 AP to movement, Initiative +24, disables enemy Reaction, Evasion skill gain +100%. Additionally grants +6 Evasion.")
 
 -- GLADIATOR
-SetFeatDescription("/Game/Gameplay/Feats/F_Gladiator.F_Gladiator_C",
+UpdateFeatDescription("/Game/Gameplay/Feats/F_Gladiator.F_Gladiator_C",
     "The gladiator deals a little more damage. (+1 min/max melee damage)")
 
 -- HEAVY HITTER
-SetFeatDescription("/Game/Gameplay/Feats/F_HeavyHitter.F_HeavyHitter_C",
+UpdateFeatDescription("/Game/Gameplay/Feats/F_HeavyHitter.F_HeavyHitter_C",
     "+1% Crit Chance for every 3 Perception.")
 
 -- TOUGH BASTARD
-SetFeatDescription("/Game/Gameplay/Feats/F_ToughBastard.F_ToughBastard_C",
+UpdateFeatDescription("/Game/Gameplay/Feats/F_ToughBastard.F_ToughBastard_C",
     "Requires CON >= 6. If requirement not met, all bonuses are suppressed.")
-
-
--- -- ============================================================
--- -- MOD DESCRIPTION (description.txt)
--- -- ============================================================
--- local function CreateModDescription()
---     local f = io.open(SCRIPT_PATH .. "description.txt", "w")
---     if not f then return end
---     f:write([[
--- FeatRebalance Mod
-
--- Rebalances all major feats for solo play viability. Includes:
--- - Weapon-specific feats (Basher, Butcher) reworked for blunt / blade identity
--- - Warrior armor penalty reduction per melee skill level
--- - Tiered HP-based feats (Berserker, Juggernaut)
--- - Educated / Mastermind / Gifted: additional SkillXP gain
--- - Healing Factor: scaling HP regen based on character level
--- - Fast Runner: extra Evasion when moving
--- - Gladiator: +1 melee damage
--- - Heavy Hitter: +1% Crit Chance per 3 Perception
--- - Tough Bastard: CON 6 gate
-
--- Configurable via config.ini.
--- ]])
---     f:close()
--- end
-
-CreateModDescription()
 
 -- ============================================================
 -- CONSOLE COMMANDS FOR TESTING
 -- ============================================================
-RegisterConsoleCommand("AddFeatPoints", function(args)
+RegisterConsoleCommandHandler("AddFeatPoints", function(args)
     local amount = tonumber(args[1]) or 5
     local pc = GetPlayerController()
     local char = pc and pc:GetPawn()
@@ -740,7 +741,7 @@ RegisterConsoleCommand("AddFeatPoints", function(args)
     end
 end)
 
-RegisterConsoleCommand("RemoveAllFeats", function()
+RegisterConsoleCommandHandler("RemoveAllFeats", function()
     local pc = GetPlayerController()
     local char = pc and pc:GetPawn()
     if not char then
