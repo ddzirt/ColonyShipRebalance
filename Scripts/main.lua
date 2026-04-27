@@ -405,7 +405,7 @@ HookFeat("/Game/Gameplay/Feats/F_FastRunner.F_FastRunner_C",
         local ref = GetEffects(Effects)
         if not ref or not IsConditionMet(IsValid) then return end
 
-        Set(ref, F.Evasion, 6)
+        Set(ref, F.Evasion, cfg("FASTRUNNER_EVASION", 6))
         Log("FastRunner: +6 Evasion applied")
     end
 )
