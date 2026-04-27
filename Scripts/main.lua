@@ -293,10 +293,8 @@ HookFeat("/Game/Gameplay/Feats/F_Berserker.F_Berserker_C",
 -- ============================================================
 -- BASHER (blunt weapons)
 -- Vanilla: aimed attack bonus
--- Rebalanced: blunt accuracy + knockdown chance + penetration
---             per skill level (penetration fits blunt weapon
---             identity better than aimed)
--- Config: BASHER_THC, BASHER_KNOCKDOWN, BASHER_PEN_PER_LEVEL
+-- Rebalanced: blunt accuracy + knockdown + aimed THC per skill level
+-- Config: BASHER_THC, BASHER_KNOCKDOWN, BASHER_AIMED_PER_LEVEL
 -- ============================================================
 HookFeat("/Game/Gameplay/Feats/F_Basher.F_Basher_C",
     "Get Conditional Effects",
@@ -316,20 +314,19 @@ HookFeat("/Game/Gameplay/Feats/F_Basher.F_Basher_C",
             end
         end
 
-        Set(ref, F.AimedTHC, 0)
+        Set(ref, F.PenetrationPct, 0) -- remove any vanilla penetration
         Set(ref, F.MeleeTHC, cfg("BASHER_THC", 8))
         Set(ref, F.KnockdownChance, cfg("BASHER_KNOCKDOWN", 20))
-        Set(ref, F.PenetrationPct, skillLevel * cfg("BASHER_PEN_PER_LEVEL", 2))
-        Log("Basher: applied (pen=" .. skillLevel * cfg("BASHER_PEN_PER_LEVEL", 2) .. ")")
+        Set(ref, F.AimedTHC, skillLevel * cfg("BASHER_AIMED_PER_LEVEL", 2))
+        Log("Basher: applied (aimed=" .. skillLevel * cfg("BASHER_AIMED_PER_LEVEL", 2) .. ")")
     end
 )
 
 -- ============================================================
 -- BUTCHER (bladed weapons)
 -- Vanilla: penetration bonus
--- Rebalanced: bladed accuracy + carve crit chance + aimed
---             per skill level (precision identity for blades)
--- Config: BUTCHER_THC, BUTCHER_CSC, BUTCHER_AIMED_PER_LEVEL
+-- Rebalanced: bladed accuracy + crit chance + penetration per skill level
+-- Config: BUTCHER_THC, BUTCHER_CSC, BUTCHER_PEN_PER_LEVEL
 -- ============================================================
 HookFeat("/Game/Gameplay/Feats/F_Butcher.F_Butcher_C",
     "Get Conditional Effects",
@@ -349,11 +346,11 @@ HookFeat("/Game/Gameplay/Feats/F_Butcher.F_Butcher_C",
             end
         end
 
-        Set(ref, F.PenetrationPct, 0)
+        Set(ref, F.AimedTHC, 0) -- remove any vanilla aimed bonus
         Set(ref, F.MeleeTHC, cfg("BUTCHER_THC", 8))
         Set(ref, F.CSC, cfg("BUTCHER_CSC", 20))
-        Set(ref, F.AimedTHC, skillLevel * cfg("BUTCHER_AIMED_PER_LEVEL", 1))
-        Log("Butcher: applied (aimed=" .. skillLevel * cfg("BUTCHER_AIMED_PER_LEVEL", 1) .. ")")
+        Set(ref, F.PenetrationPct, skillLevel * cfg("BUTCHER_PEN_PER_LEVEL", 2))
+        Log("Butcher: applied (pen=" .. skillLevel * cfg("BUTCHER_PEN_PER_LEVEL", 2) .. ")")
     end
 )
 
@@ -677,12 +674,11 @@ SetFeatDescription("/Game/Gameplay/Feats/F_Gifted.F_Gifted_C",
 
 -- HEALING FACTOR
 SetFeatDescription("/Game/Gameplay/Feats/F_H_HealingFactor.F_H_HealingFactor_C",
-    "HP regen per turn = floor(character level / " .. cfg("HF_REGEN_PER_LEVELS", 5) .. ")." ..
-    " Example: level 10 = +2 HP regen.")
+    "HP regen per turn = floor(character level / " .. cfg("HF_REGEN_PER_LEVELS", 5) .. ").")
 
 -- FAST RUNNER
 SetFeatDescription("/Game/Gameplay/Feats/F_FastRunner.F_FastRunner_C",
-    "When moving on your turn: +4 Initiative (vanilla) and +6 Evasion (rebalance).")
+    "+6 AP to movement, Initiative +24, disables enemy Reaction, Evasion skill gain +100%. Additionally grants +6 Evasion.")
 
 -- GLADIATOR
 SetFeatDescription("/Game/Gameplay/Feats/F_Gladiator.F_Gladiator_C",

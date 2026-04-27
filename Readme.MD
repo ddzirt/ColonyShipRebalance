@@ -33,6 +33,80 @@ If you are using a custom mod location or need to verify loading:
 * The mod will be automatically initialized by the UE4SS loader.
 * If using the UE4SS GUI, you can check the "Mods" tab to ensure the mod is toggled to "Enabled."
 
+## Feat Rebalance - Balance Changes Summary
+
+### Lone Wolf
+
+* Evasion increased from +12 to +16.
+* Initiative increased from +16 to +20.
+* Added +4 Armor Penalty reduction.
+
+### Warrior
+
+* Additionally grants armor penalty reduction equal to (Melee Skill Level × 1), defaulting to +1 per level.
+
+### Berserker
+
+* HP above 50%: no bonus.
+* HP ≤ 50%: +1 min and max melee damage.
+* HP ≤ 25%: +2 min and max melee damage.
+* At 13 HP or below, the vanilla +2 bonus applies (no additional mod bonus).
+
+### Juggernaut (Heroic)
+
+* HP above 50%: +1 Natural DR.
+* HP ≤ 50%: +2 Natural DR.
+* HP ≤ 25%: +3 Natural DR.
+* At 13 HP or below, vanilla handles its own +4 DR (no extra).
+
+### Basher (blunt weapons)
+
+* Removed vanilla penetration bonus.
+* Added +8% Melee THC.
+* Added +20% Knockdown Critical Chance.
+* Added +1% Aimed THC per Melee Skill Level.
+
+### Butcher (bladed weapons)
+
+* Removed vanilla aimed attack bonus.
+* Added +8% Melee THC.
+* Added +20% Carve Critical Chance.
+* Added +2% Penetration per Melee Skill Level.
+
+### Fast Runner
+
+* Additionally grants +6 Evasion.
+
+### Gladiator
+
+* Now provides a flat +1 min and +1 max melee damage.
+
+### Heavy Hitter
+
+* Additionally grants +1% Critical Strike Chance per 3 points of Perception.
+
+### Tough Bastard
+
+* Requires Constitution ≥ 6 to gain any bonuses.
+* If CON < 6, all benefits (DR, HP bonus) are suppressed.
+
+### Educated
+
+* Now grants +5% Skill XP gain, but only if Intelligence ≥ 5.
+
+### Mastermind (Heroic)
+
+* Additionally grants +5% Skill XP gain.
+
+### Gifted (Heroic)
+
+* Retains +4 stat points and +4 skill points at creation.
+* Additionally grants +5% Skill XP gain.
+
+### Healing Factor (Heroic)
+
+* HP regeneration per turn is now `floor(character level / 3)` (default; configurable).
+
 ## License
 
 This project is licensed under the **MIT License**. See the `LICENSE` file for details.
