@@ -406,7 +406,7 @@ HookFeat("/Game/Gameplay/Feats/F_FastRunner.F_FastRunner_C",
         if not ref or not IsConditionMet(IsValid) then return end
 
         Set(ref, F.Evasion, cfg("FR_EVASION", 6))
-        Log("FastRunner: +" .. cfg("FASTRUNNER_EVASION", 6) .. " Evasion applied")
+        Log("FastRunner: +" .. cfg("FR_EVASION", 6) .. " Evasion applied")
     end
 )
 
@@ -423,7 +423,6 @@ HookFeat("/Game/Gameplay/Feats/F_Gladiator.F_Gladiator_C",
 
         Set(ref, F.MeleeMinDMG, cfg("GLADIATOR_MIN", 1))
         Set(ref, F.MeleeMaxDMG, cfg("GLADIATOR_MAX", 1))
-        Log("Gladiator: +1 melee damage applied")
         Log("Gladiator: +" .. cfg("GLADIATOR_MIN", 1) .. "min dmg" .. cfg("GLADIATOR_MAX", 1) .. " max dmg applied")
     end
 )
@@ -452,6 +451,7 @@ HookFeat("/Game/Gameplay/Feats/F_HeavyHitter.F_HeavyHitter_C",
         end
 
         local critBonus = math.floor(perception / cfg("HH_PER", 3))
+        critBonus = critBonus * cfg("HH_CRIT_PER_STEP", 1)
         if critBonus > 0 then
             Set(ref, F.CSC, critBonus)
             Log("HeavyHitter: +" .. critBonus .. "% CSC from " .. perception .. " Perception")
@@ -511,6 +511,8 @@ NotifyOnNewObject("/Game/Gameplay/Feats/BaseTypes/FeatBase.FeatBase_C",
                     -- EDUCATED
                     -- Vanilla: retroactive skill LP bonus on feat add (one-time)
                     -- Addition: persistent +5% SkillXPGain each combat recalc. This is not the way. It has to be added once.
+                    -- Current implementation applies the bonus repeatedly, which might stack or
+                    -- overwrite unintendedly depending on game mechanics – but that is a separate investigation.
                     -- Soft Int>=6 gate: bonus zeroed below threshold
                     -- Config: EDUCATED_XP_BONUS, EDUCATED_INT_MIN
                     if className:find("F_Educated_C") then
@@ -530,10 +532,10 @@ NotifyOnNewObject("/Game/Gameplay/Feats/BaseTypes/FeatBase.FeatBase_C",
                         end
 
                         if meetsReq then
-                            Set(ref, F.SkillXPGain, cfg("EDUCATED_XP_BONUS", 5))
-                            Log("Educated: +" .. cfg("TB_EDUCATED_XP_BONUSCON", 5) .. "% SkillXP applied")
+                            Set(ref, F.SkillXPGain, cfg("EDUCATED_SXP_BONUS", 5))
+                            Log("Educated: +" .. cfg("EDUCATED_SXP_BONUS", 5) .. "% SkillXP applied")
                         else
-                            Log("Educated: Int<" .. cfg("TB_EDUCATED_XP_BONUSCON", 5) .. ", suppressed")
+                            Log("Educated: Int<" .. cfg("EDUCATED_INT_MIN", 6) .. ", suppressed")
                         end
 
                         -- MASTERMIND (Heroic)
@@ -544,8 +546,8 @@ NotifyOnNewObject("/Game/Gameplay/Feats/BaseTypes/FeatBase.FeatBase_C",
                     elseif className:find("F_H_Mastermind_C") then
                         local ref = GetEffects(Effects)
                         if not ref then return end
-                        Set(ref, F.SkillXPGain, cfg("MASTERMIND_XP_BONUS", 5))
-                        Log("Mastermind: +" .. cfg("MASTERMIND_XP_BONUS", 5) .. "% SkillXP applied")
+                        Set(ref, F.SkillXPGain, cfg("MASTERMIND_SXP_BONUS", 5))
+                        Log("Mastermind: +" .. cfg("MASTERMIND_SXP_BONUS", 5) .. "% SkillXP applied")
 
                         -- GIFTED (Heroic)
                         -- Vanilla: +4 stat points, +4 skill points at creation
@@ -555,8 +557,8 @@ NotifyOnNewObject("/Game/Gameplay/Feats/BaseTypes/FeatBase.FeatBase_C",
                     elseif className:find("F_Gifted_C") then
                         local ref = GetEffects(Effects)
                         if not ref then return end
-                        Set(ref, F.SkillXPGain, cfg("GIFTED_SKILL_XP", 5))
-                        Log("Gifted: +" .. cfg("GIFTED_SKILL_XP", 5) .. "% SkillXP applied")
+                        Set(ref, F.SkillXPGain, cfg("GIFTED_SKILL_SXP", 5))
+                        Log("Gifted: +" .. cfg("GIFTED_SKILL_SXP", 5) .. "% SkillXP applied")
                     end
                 end
             )
@@ -700,8 +702,8 @@ UpdateFeatDescription("/Game/Gameplay/Feats/F_H_Juggernaut.F_H_Juggernaut_C",
 -- EDUCATED
 UpdateFeatDescription("/Game/Gameplay/Feats/F_Educated.F_Educated_C",
     "INT >= " ..
-    cfg("EDUCATED_XP_BONUS", 6) ..
-    ": +" .. cfg("EDUCATED_XP_BONUS", 6) .. "% Skill XP gain. Also retroactive skill points.")
+    cfg("EDUCATED_INT_MIN", 6) ..
+    ": +" .. cfg("EDUCATED_SXP_BONUS", 5) .. "% Skill XP gain. Also retroactive skill points.")
 
 -- MASTERMIND
 UpdateFeatDescription("/Game/Gameplay/Feats/F_H_Mastermind.F_H_Mastermind_C",
