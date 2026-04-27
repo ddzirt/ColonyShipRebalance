@@ -423,7 +423,7 @@ HookFeat("/Game/Gameplay/Feats/F_Gladiator.F_Gladiator_C",
 
         Set(ref, F.MeleeMinDMG, cfg("GLADIATOR_MIN", 1))
         Set(ref, F.MeleeMaxDMG, cfg("GLADIATOR_MAX", 1))
-        Log("Gladiator: +" .. cfg("GLADIATOR_MIN", 1) .. "min dmg" .. cfg("GLADIATOR_MAX", 1) .. " max dmg applied")
+        Log("Gladiator: +" .. cfg("GLADIATOR_MIN", 1) .. " min dmg +" .. cfg("GLADIATOR_MAX", 1) .. " max dmg applied")
     end
 )
 
@@ -514,7 +514,7 @@ NotifyOnNewObject("/Game/Gameplay/Feats/BaseTypes/FeatBase.FeatBase_C",
                     -- Current implementation applies the bonus repeatedly, which might stack or
                     -- overwrite unintendedly depending on game mechanics – but that is a separate investigation.
                     -- Soft Int>=6 gate: bonus zeroed below threshold
-                    -- Config: EDUCATED_XP_BONUS, EDUCATED_INT_MIN
+                    -- Config: EDUCATED_SXP_BONUS, EDUCATED_INT_MIN
                     if className:find("F_Educated_C") then
                         local ref = GetEffects(Effects)
                         if not ref then return end
@@ -542,7 +542,7 @@ NotifyOnNewObject("/Game/Gameplay/Feats/BaseTypes/FeatBase.FeatBase_C",
                         -- Vanilla: bonus feat levels, Int-gated
                         -- Addition: +5% SkillXPGain to address skill point
                         --           deficit on Str-heavy solo builds
-                        -- Config: MASTERMIND_XP_BONUS
+                        -- Config: MASTERMIND_SXP_BONUS
                     elseif className:find("F_H_Mastermind_C") then
                         local ref = GetEffects(Effects)
                         if not ref then return end
@@ -553,7 +553,7 @@ NotifyOnNewObject("/Game/Gameplay/Feats/BaseTypes/FeatBase.FeatBase_C",
                         -- Vanilla: +4 stat points, +4 skill points at creation
                         -- Addition: +5% SkillXPGain (makes ongoing play
                         --           competitive with Mastermind/Educated)
-                        -- Config: GIFTED_SKILL_XP
+                        -- Config: GIFTED_SKILL_SXP
                     elseif className:find("F_Gifted_C") then
                         local ref = GetEffects(Effects)
                         if not ref then return end
@@ -679,9 +679,10 @@ UpdateFeatDescription("/Game/Gameplay/Feats/F_Warrior.F_Warrior_C",
 
 -- BERSERKER
 UpdateFeatDescription("/Game/Gameplay/Feats/F_Berserker.F_Berserker_C",
-    "HP > 50%: no bonus. HP <= 50%: +1 Melee DMG. HP <= " ..
-    math.floor(cfg("BERSERK_LOW_HP_PCT", 0.25) * 100) ..
-    "%: +2 Melee DMG. At 13 HP or below, vanilla +2 applies.")
+    "HP > " .. math.floor(cfg("BERSERK_MID_HP_PCT", 0.50) * 100) .. "%: no bonus. " ..
+    "HP <= " .. math.floor(cfg("BERSERK_MID_HP_PCT", 0.50) * 100) .. "%: +1 Melee DMG. " ..
+    "HP <= " .. math.floor(cfg("BERSERK_LOW_HP_PCT", 0.25) * 100) .. "%: +2 Melee DMG. " ..
+    "At 13 HP or below, vanilla +2 applies.")
 
 -- BASHER
 UpdateFeatDescription("/Game/Gameplay/Feats/F_Basher.F_Basher_C",
@@ -730,8 +731,7 @@ UpdateFeatDescription("/Game/Gameplay/Feats/F_Gladiator.F_Gladiator_C",
 
 -- HEAVY HITTER
 UpdateFeatDescription("/Game/Gameplay/Feats/F_HeavyHitter.F_HeavyHitter_C",
-    "+1% Crit Chance for every " ..
-    cfg("HH_PER", 3) .. " Perception.")
+    "+" .. cfg("HH_CRIT_PER_STEP", 1) .. "% Crit Chance for every " .. cfg("HH_PER", 3) .. " Perception.")
 
 -- TOUGH BASTARD
 UpdateFeatDescription("/Game/Gameplay/Feats/F_ToughBastard.F_ToughBastard_C",
