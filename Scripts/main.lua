@@ -224,7 +224,7 @@ HookFeat("/Game/Gameplay/Feats/F_LoneWolf.F_LoneWolf_C",
 -- ============================================================
 -- WARRIOR
 -- Vanilla: THC and CSC bonuses per melee skill level
--- Addition: +ArmorPenalty per skill level (armor becomes usable
+-- Addition: +ArmorHandling named ArmorPenalty in code per skill level (armor becomes usable
 --           without needing STR 10 Juggernaut)
 -- Config: WARRIOR_ARMOR_PER_LEVEL
 -- ============================================================
@@ -249,7 +249,7 @@ HookFeat("/Game/Gameplay/Feats/F_Warrior.F_Warrior_C",
         local bonus = skillLevel * cfg("WARRIOR_ARMOR_PER_LEVEL", 1)
         -- Set directly, not additive, to avoid stacking across recalculations
         Set(ref, F.ArmorPenalty, bonus)
-        Log("Warrior: ArmorPenalty set to " .. bonus)
+        Log("Warrior: ArmorHandling set to " .. bonus)
     end
 )
 
@@ -292,7 +292,7 @@ HookFeat("/Game/Gameplay/Feats/F_Berserker.F_Berserker_C",
 
 -- ============================================================
 -- BASHER (blunt weapons)
--- Vanilla: aimed attack bonus
+-- Vanilla: penetration
 -- Rebalanced: blunt accuracy + knockdown + aimed THC per skill level
 -- Config: BASHER_THC, BASHER_KNOCKDOWN, BASHER_AIMED_PER_LEVEL
 -- ============================================================
@@ -324,7 +324,7 @@ HookFeat("/Game/Gameplay/Feats/F_Basher.F_Basher_C",
 
 -- ============================================================
 -- BUTCHER (bladed weapons)
--- Vanilla: penetration bonus
+-- Vanilla: aimed bonus
 -- Rebalanced: bladed accuracy + crit chance + penetration per skill level
 -- Config: BUTCHER_THC, BUTCHER_CSC, BUTCHER_PEN_PER_LEVEL
 -- ============================================================
@@ -396,8 +396,8 @@ HookFeat("/Game/Gameplay/Feats/F_H_Juggernaut.F_H_Juggernaut_C",
 
 -- ============================================================
 -- FAST RUNNER
--- Vanilla: +4 Initiative when move on turn
--- Addition: +6 Evasion (same condition)
+-- Addition: +6 Evasion
+-- Config: FR_EVASION
 -- ============================================================
 HookFeat("/Game/Gameplay/Feats/F_FastRunner.F_FastRunner_C",
     "Get Conditional Effects",
@@ -405,7 +405,7 @@ HookFeat("/Game/Gameplay/Feats/F_FastRunner.F_FastRunner_C",
         local ref = GetEffects(Effects)
         if not ref or not IsConditionMet(IsValid) then return end
 
-        Set(ref, F.Evasion, cfg("FASTRUNNER_EVASION", 6))
+        Set(ref, F.Evasion, cfg("FR_EVASION", 6))
         Log("FastRunner: +6 Evasion applied")
     end
 )
@@ -413,6 +413,7 @@ HookFeat("/Game/Gameplay/Feats/F_FastRunner.F_FastRunner_C",
 -- ============================================================
 -- GLADIATOR
 -- Addition: flat +1 min/max melee damage
+-- Config: GLADIATOR_MIN, GLADIATOR_MAX
 -- ============================================================
 HookFeat("/Game/Gameplay/Feats/F_Gladiator.F_Gladiator_C",
     "Get Conditional Effects",
@@ -420,8 +421,8 @@ HookFeat("/Game/Gameplay/Feats/F_Gladiator.F_Gladiator_C",
         local ref = GetEffects(Effects)
         if not ref or not IsConditionMet(IsValid) then return end
 
-        Set(ref, F.MeleeMinDMG, 1)
-        Set(ref, F.MeleeMaxDMG, 1)
+        Set(ref, F.MeleeMinDMG, cfg("GLADIATOR_MIN", 1))
+        Set(ref, F.MeleeMaxDMG, cfg("GLADIATOR_MAX", 1))
         Log("Gladiator: +1 melee damage applied")
     end
 )
@@ -429,6 +430,7 @@ HookFeat("/Game/Gameplay/Feats/F_Gladiator.F_Gladiator_C",
 -- ============================================================
 -- HEAVY HITTER
 -- Addition: +1% Crit Chance per 3 Perception
+-- Config: HH_PER
 -- ============================================================
 HookFeat("/Game/Gameplay/Feats/F_HeavyHitter.F_HeavyHitter_C",
     "Get Conditional Effects",
@@ -448,7 +450,7 @@ HookFeat("/Game/Gameplay/Feats/F_HeavyHitter.F_HeavyHitter_C",
             end
         end
 
-        local critBonus = math.floor(perception / 3)
+        local critBonus = math.floor(perception / cfg("HH_PER", 3))
         if critBonus > 0 then
             Set(ref, F.CSC, critBonus)
             Log("HeavyHitter: +" .. critBonus .. "% CSC from " .. perception .. " Perception")
@@ -459,6 +461,7 @@ HookFeat("/Game/Gameplay/Feats/F_HeavyHitter.F_HeavyHitter_C",
 -- ============================================================
 -- TOUGH BASTARD
 -- Requirement: Constitution >= 6, otherwise all benefits suppressed
+-- Config: TB_CON
 -- ============================================================
 HookFeat("/Game/Gameplay/Feats/F_ToughBastard.F_ToughBastard_C",
     "Get Conditional Effects",
@@ -478,7 +481,7 @@ HookFeat("/Game/Gameplay/Feats/F_ToughBastard.F_ToughBastard_C",
             end
         end
 
-        if con < 6 then
+        if con < cfg("TB_CON", 6) then
             -- Zero out the feat's bonuses (common fields for Tough Bastard)
             Set(ref, F.NaturalDR, 0)
             Set(ref, F.MaxHP, 0)
@@ -589,7 +592,7 @@ NotifyOnNewObject("/Game/Gameplay/Feats/BaseTypes/F_RegenBase.F_RegenBase_C",
                     if not char then return end
 
                     local level = GetCharLevel(char)
-                    local perLevels = cfg("HF_REGEN_PER_LEVELS", 5)
+                    local perLevels = cfg("HF_REGEN_PER_LEVELS", 3)
                     local bonus = math.floor(level / perLevels)
 
                     -- Override vanilla completely; set absolute value
