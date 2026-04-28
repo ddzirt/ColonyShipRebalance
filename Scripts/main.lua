@@ -613,130 +613,73 @@ NotifyOnNewObject("/Game/Gameplay/Feats/BaseTypes/F_RegenBase.F_RegenBase_C",
 )
 
 -- ============================================================
--- DESCRIPTION OVERRIDE
+-- DESCRIPTION SYSTEM
+-- Hook FeatInfoWidget_C:Construct — fires when each feat slot
+-- is populated. Read Feat Data to identify feat, write our
+-- text to Feat Description on the live widget instance.
+-- Descriptions loaded from descriptions-[lang].lua
 -- ============================================================
-local function UpdateFeatDescription(classPath, moddedInfo)
-    local function ApplyTo(obj)
-        if not obj or not obj:IsValid() then return end
 
-        ExecuteInGameThread(function()
-            if not obj or not obj:IsValid() then return end
-
-            -- Colony Ship uses specific property names found in your dump:
-            -- 'Description' for the main text
-            -- 'Visible Name' for the header (optional to change)
-            pcall(function()
-                obj.Description = FText(moddedInfo)
-                -- Log success for debugging
-                -- print("[Mod] Updated description for: " .. obj:GetFullName())
-            end)
-        end)
-    end
-
-    -- 1. Catch new objects (Feat Selection screen)
-    NotifyOnNewObject(classPath, ApplyTo)
-
-    -- 2. Force Update existing objects (Character Sheet fix)
-    local function ForceRefresh()
-        -- StaticFindObject might return nil if the asset isn't loaded yet
-        local cls = StaticFindObject(classPath)
-        if cls and cls:IsValid() then
-            -- Update the template (CDO)
-            local cdo = cls:GetClassDefaultObject()
-            if cdo then ApplyTo(cdo) end
-
-            -- Update all instances currently held by characters
-            local existing = FindAllOf(cls)
-            if existing then
-                for _, inst in ipairs(existing) do
-                    ApplyTo(inst)
-                end
-            end
-        end
-    end
-
-    -- Run once safely at startup
-    pcall(ForceRefresh)
-
-    -- 3. HOOK THE UI (The "CharAndCreation" widget you found)
-    -- This forces an update whenever the UI widget is constructed
-    local uiPath = "/Game/Gui/Controls/CharAndCreation/FeatInfoWidget.FeatInfoWidget_C"
-    RegisterHook(uiPath .. ":Construct", function()
-        ForceRefresh()
-    end)
+-- Load description table from language file
+local lang = cfg("LANGUAGE", "en")
+local descFile = SCRIPT_PATH .. "descriptions-" .. lang .. ".lua"
+local descLoader = loadfile(descFile)
+if not descLoader then
+    -- fallback to english
+    descLoader = loadfile(SCRIPT_PATH .. "descriptions-en.lua")
 end
+local DESCRIPTIONS = descLoader and descLoader()(cfg) or {}
+-- descriptions-en.lua receives cfg function and returns a table:
+-- { ["/Game/Gameplay/Feats/F_LoneWolf.F_LoneWolf_C"] = "text", ... }
 
--- LONE WOLF
-UpdateFeatDescription("/Game/Gameplay/Feats/F_LoneWolf.F_LoneWolf_C",
-    "SOLO: +" .. cfg("LW_EVASION", 16) .. " Evasion, +" .. cfg("LW_INITIATIVE", 20) ..
-    " Initiative, +" .. cfg("LW_ARMOR_PENALTY", 4) .. " Armor Penalty reduction.")
+local WidgetHookRegistered = false
+NotifyOnNewObject("/Game/Gui/Controls/CharAndCreation/FeatInfoWidget.FeatInfoWidget_C",
+    function()
+        if WidgetHookRegistered then return end
+        WidgetHookRegistered = true
 
+        local ok, err = pcall(function()
+            RegisterHook("/Game/Gui/Controls/CharAndCreation/FeatInfoWidget.FeatInfoWidget_C:Construct",
+                function(self)
+                    local widget = self:get()
+                    if not widget then return end
 
--- WARRIOR
-UpdateFeatDescription("/Game/Gameplay/Feats/F_Warrior.F_Warrior_C",
-    "Grants melee accuracy bonuses and reduces armor penalty per Melee skill level." ..
-    " (+" .. cfg("WARRIOR_ARMOR_PER_LEVEL", 1) .. " Armor Penalty per skill level)")
+                    -- Read Feat Data to identify which feat this slot shows
+                    local featOk, featData = pcall(function()
+                        return widget:GetPropertyValue("Feat Data")
+                    end)
+                    if not featOk or not featData then return end
 
--- BERSERKER
-UpdateFeatDescription("/Game/Gameplay/Feats/F_Berserker.F_Berserker_C",
-    "HP > " .. math.floor(cfg("BERSERK_MID_HP_PCT", 0.50) * 100) .. "%: no bonus. " ..
-    "HP <= " .. math.floor(cfg("BERSERK_MID_HP_PCT", 0.50) * 100) .. "%: +1 Melee DMG. " ..
-    "HP <= " .. math.floor(cfg("BERSERK_LOW_HP_PCT", 0.25) * 100) .. "%: +2 Melee DMG. " ..
-    "At 13 HP or below, vanilla +2 applies.")
+                    local pathOk, fullName = pcall(function()
+                        return featData:GetClass():GetFullName()
+                    end)
+                    if not pathOk or not fullName then return end
 
--- BASHER
-UpdateFeatDescription("/Game/Gameplay/Feats/F_Basher.F_Basher_C",
-    "Blunt accuracy +" .. cfg("BASHER_THC", 8) .. "%, knockdown +" .. cfg("BASHER_KNOCKDOWN", 20) ..
-    "%, Aimed Accuracy +" .. cfg("BASHER_AIMED_PER_LEVEL", 2) .. "% per melee skill level.")
+                    -- FullName: "BlueprintGeneratedClass /Game/...F_X.F_X_C"
+                    local classPath = fullName:match("BlueprintGeneratedClass (.*)")
+                    if not classPath then return end
 
--- BUTCHER
-UpdateFeatDescription("/Game/Gameplay/Feats/F_Butcher.F_Butcher_C",
-    "Bladed accuracy +" .. cfg("BUTCHER_THC", 8) .. "%, crit +" .. cfg("BUTCHER_CSC", 20) ..
-    "%, penetration +" .. cfg("BUTCHER_PEN_PER_LEVEL", 2) .. " per melee skill level.")
+                    local desc = DESCRIPTIONS[classPath]
+                    if not desc then return end
 
--- JUGGERNAUT
-UpdateFeatDescription("/Game/Gameplay/Feats/F_H_Juggernaut.F_H_Juggernaut_C",
-    "HP > " .. math.floor(cfg("JUGG_MID_HP_PCT", 0.50) * 100) .. "%: +1 DR. HP <= " ..
-    math.floor(cfg("JUGG_MID_HP_PCT", 0.50) * 100) .. "%: +2 DR. HP <= " ..
-    math.floor(cfg("JUGG_LOW_HP_PCT", 0.25) * 100) .. "%: +3 DR. At 13 HP or below, vanilla +4 applies.")
+                    -- Write to Feat Description on the live widget instance
+                    pcall(function()
+                        widget:SetPropertyValue("Feat Description", FText(desc))
+                    end)
 
--- EDUCATED
-UpdateFeatDescription("/Game/Gameplay/Feats/F_Educated.F_Educated_C",
-    "INT >= " ..
-    cfg("EDUCATED_INT_MIN", 6) ..
-    ": +" .. cfg("EDUCATED_SXP_BONUS", 5) .. "% Skill XP gain. Also retroactive skill points.")
+                    -- Also push to the TextBlock directly as fallback
+                    pcall(function()
+                        local tb = widget:GetPropertyValue("TextBlockFeatDescription")
+                        if tb then tb:SetText(FText(desc)) end
+                    end)
+                end
+            )
+        end)
 
--- MASTERMIND
-UpdateFeatDescription("/Game/Gameplay/Feats/F_H_Mastermind.F_H_Mastermind_C",
-    "Bonus feat levels (INT-gated) plus +" .. cfg("MASTERMIND_SXP_BONUS", 5) .. "% Skill XP gain.")
-
--- GIFTED
-UpdateFeatDescription("/Game/Gameplay/Feats/F_Gifted.F_Gifted_C",
-    "+4 stat points, +4 skill points, plus +" .. cfg("GIFTED_SKILL_SXP", 5) .. "% Skill XP gain.")
-
--- HEALING FACTOR
-UpdateFeatDescription("/Game/Gameplay/Feats/F_H_HealingFactor.F_H_HealingFactor_C",
-    "HP regen per turn = floor(character level / " .. cfg("HF_REGEN_PER_LEVELS", 3) .. ").")
-
--- FAST RUNNER
-UpdateFeatDescription("/Game/Gameplay/Feats/F_FastRunner.F_FastRunner_C",
-    "+6 AP to movement, Initiative +24, disables enemy Reaction, Evasion skill gain +100%. Additionally grants +" ..
-    cfg("FR_EVASION", 6) .. " Evasion.")
-
--- GLADIATOR
-UpdateFeatDescription("/Game/Gameplay/Feats/F_Gladiator.F_Gladiator_C",
-    "The gladiator deals a little more damage. (+" ..
-    cfg("GLADIATOR_MIN", 1) .. " min and +" ..
-    cfg("GLADIATOR_MAX", 1) .. " max melee damage)")
-
--- HEAVY HITTER
-UpdateFeatDescription("/Game/Gameplay/Feats/F_HeavyHitter.F_HeavyHitter_C",
-    "+" .. cfg("HH_CRIT_PER_STEP", 1) .. "% Crit Chance for every " .. cfg("HH_PER", 3) .. " Perception.")
-
--- TOUGH BASTARD
-UpdateFeatDescription("/Game/Gameplay/Feats/F_ToughBastard.F_ToughBastard_C",
-    "Requires CON >= " ..
-    cfg("TB_CON", 6) .. ". If requirement not met, all bonuses are suppressed.")
+        LogAlways(ok and "Hook registered: FeatInfoWidget:Construct"
+            or "Hook FAILED: FeatInfoWidget | " .. tostring(err))
+    end
+)
 
 -- ============================================================
 -- CONSOLE COMMANDS FOR TESTING
