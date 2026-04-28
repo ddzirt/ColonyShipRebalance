@@ -676,7 +676,7 @@ NotifyOnNewObject("/Game/Gui/Controls/CharAndCreation/FeatInfoWidget.FeatInfoWid
             )
         end)
 
-        LogAlways(ok and "Hook registered: FeatInfoWidget:Construct"
+        Log(ok and "Hook registered: FeatInfoWidget:Construct"
             or "Hook FAILED: FeatInfoWidget | " .. tostring(err))
     end
 )
