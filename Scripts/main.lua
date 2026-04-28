@@ -45,54 +45,6 @@ local function cfg(key, default)
 end
 
 -- ============================================================
--- PERSISTENT STATE
--- Survives across game sessions via state.json next to main.lua
--- Use for tracking things vanilla saves don't expose to Lua
--- ============================================================
-local STATE_PATH = SCRIPT_PATH .. "state.json"
-
-local function LoadState()
-    local f = io.open(STATE_PATH, "r")
-    if not f then return {} end
-    local content = f:read("*a")
-    f:close()
-    -- Minimal JSON parser for flat key=value number/bool/string
-    local state = {}
-    for k, v in content:gmatch('"([^"]+)"%s*:%s*([^,}]+)') do
-        v = v:match("^%s*(.-)%s*$")
-        if v == "true" then
-            state[k] = true
-        elseif v == "false" then
-            state[k] = false
-        elseif tonumber(v) then
-            state[k] = tonumber(v)
-        else
-            state[k] = v:match('^"(.*)"$') or v
-        end
-    end
-    return state
-end
-
-local function SaveState(state)
-    local f = io.open(STATE_PATH, "w")
-    if not f then return end
-    f:write("{\n")
-    local entries = {}
-    for k, v in pairs(state) do
-        if type(v) == "string" then
-            table.insert(entries, '  "' .. k .. '": "' .. v .. '"')
-        else
-            table.insert(entries, '  "' .. k .. '": ' .. tostring(v))
-        end
-    end
-    f:write(table.concat(entries, ",\n"))
-    f:write("\n}\n")
-    f:close()
-end
-
-local STATE = LoadState()
-
--- ============================================================
 -- LOGGING
 -- ============================================================
 local logPath = SCRIPT_PATH .. "RebalanceLog.txt"
@@ -113,11 +65,6 @@ end
 local function Set(ref, field, value)
     local ok, err = pcall(function() ref[field] = value end)
     if not ok then Log("SET FAILED [" .. field .. "]: " .. tostring(err)) end
-end
-
-local function Get(ref, field)
-    local ok, val = pcall(function() return ref[field] end)
-    return ok and val or nil
 end
 
 local function GetEffects(Effects)
@@ -237,11 +184,20 @@ HookFeat("/Game/Gameplay/Feats/F_Warrior.F_Warrior_C",
         local skillLevel = 1
         local char = GetChar(OwnerCharacter)
         if char then
+            -- Melee skill is a UObject; try reading level from it directly
             for _, name in ipairs({ "MeleeSkill", "Melee", "MeleeLevel", "SkillMelee" }) do
-                local ok, sv = pcall(function() return char:GetPropertyValue(name) end)
-                if ok and sv and type(sv) == "number" and sv > 0 then
-                    skillLevel = sv
-                    break
+                local ok, skillObj = pcall(function() return char:GetPropertyValue(name) end)
+                if ok and skillObj then
+                    -- Try common level accessor methods/properties on the skill object
+                    for _, lvlName in ipairs({ "Level", "SkillLevel", "CurrentLevel", "Rank" }) do
+                        local lok, lv = pcall(function() return skillObj:GetPropertyValue(lvlName) end)
+                        if lok and lv and type(lv) == "number" and lv > 0 then
+                            skillLevel = lv
+                            Log("Skill level found: " .. name .. "." .. lvlName .. " = " .. lv)
+                            break
+                        end
+                    end
+                    if skillLevel > 1 then break end
                 end
             end
         end
@@ -395,22 +351,6 @@ HookFeat("/Game/Gameplay/Feats/F_H_Juggernaut.F_H_Juggernaut_C",
 )
 
 -- ============================================================
--- FAST RUNNER
--- Addition: +6 Evasion
--- Config: FR_EVASION
--- ============================================================
-HookFeat("/Game/Gameplay/Feats/F_FastRunner.F_FastRunner_C",
-    "Get Conditional Effects",
-    function(self, OwnerCharacter, Effects, IsValid)
-        local ref = GetEffects(Effects)
-        if not ref or not IsConditionMet(IsValid) then return end
-
-        Set(ref, F.Evasion, cfg("FR_EVASION", 6))
-        Log("FastRunner: +" .. cfg("FR_EVASION", 6) .. " Evasion applied")
-    end
-)
-
--- ============================================================
 -- GLADIATOR
 -- Addition: flat +1 min/max melee damage
 -- Config: GLADIATOR_MIN, GLADIATOR_MAX
@@ -455,40 +395,6 @@ HookFeat("/Game/Gameplay/Feats/F_HeavyHitter.F_HeavyHitter_C",
         if critBonus > 0 then
             Set(ref, F.CSC, critBonus)
             Log("HeavyHitter: +" .. critBonus .. "% CSC from " .. perception .. " Perception")
-        end
-    end
-)
-
--- ============================================================
--- TOUGH BASTARD
--- Requirement: Constitution >= 6, otherwise all benefits suppressed
--- Config: TB_CON
--- ============================================================
-HookFeat("/Game/Gameplay/Feats/F_ToughBastard.F_ToughBastard_C",
-    "Get Conditional Effects",
-    function(self, OwnerCharacter, Effects, IsValid)
-        local ref = GetEffects(Effects)
-        if not ref or not IsConditionMet(IsValid) then return end
-
-        local char = GetChar(OwnerCharacter)
-        if not char then return end
-
-        local con = 0
-        for _, name in ipairs({ "Constitution", "Con", "CONSTITUTION" }) do
-            local ok, val = pcall(function() return char:GetPropertyValue(name) end)
-            if ok and val and type(val) == "number" then
-                con = val
-                break
-            end
-        end
-
-        if con < cfg("TB_CON", 6) then
-            -- Zero out the feat's bonuses (common fields for Tough Bastard)
-            Set(ref, F.NaturalDR, 0)
-            Set(ref, F.MaxHP, 0)
-            Log("ToughBastard: CON <" .. cfg("TB_CON", 6) .. ", bonuses suppressed")
-        else
-            Log("ToughBastard: CON >= " .. cfg("TB_CON", 6) .. ", normal effects active")
         end
     end
 )
@@ -559,6 +465,41 @@ NotifyOnNewObject("/Game/Gameplay/Feats/BaseTypes/FeatBase.FeatBase_C",
                         if not ref then return end
                         Set(ref, F.SkillXPGain, cfg("GIFTED_SKILL_SXP", 5))
                         Log("Gifted: +" .. cfg("GIFTED_SKILL_SXP", 5) .. "% SkillXP applied")
+
+                        -- FAST RUNNER
+                        -- Addition: +6 Evasion
+                        -- Config: FR_EVASION
+                    elseif className:find("F_FastRunner_C") then
+                        local ref = GetEffects(Effects)
+                        if not ref then return end
+                        Set(ref, F.Evasion, cfg("FR_EVASION", 6))
+                        Log("FastRunner: +" .. cfg("FR_EVASION", 6) .. " Evasion," .. " applied")
+
+                        -- TOUGH BASTARD
+                        -- Requirement: Constitution >= 6, otherwise all benefits suppressed
+                        -- Config: TB_CON
+                    elseif className:find("F_ToughBastard_C") then
+                        local ref = GetEffects(Effects)
+                        if not ref then return end
+                        local char = GetChar(OwnerCharacter)
+                        local meetsReq = true
+                        if char then
+                            for _, name in ipairs({ "Constitution", "Con", "CON" }) do
+                                local cOk, cv = pcall(function() return char:GetPropertyValue(name) end)
+                                if cOk and cv and type(cv) == "number" then
+                                    meetsReq = cv >= cfg("TB_CON", 6)
+                                    break
+                                end
+                            end
+                        end
+                        if not meetsReq then
+                            -- Zero all fields vanilla would set — suppress entire feat
+                            Set(ref, F.MaxHP, 0)
+                            Set(ref, F.NaturalDR, 0)
+                            Log("ToughBastard: CON requirement not met, suppressed")
+                        else
+                            Log("ToughBastard: active")
+                        end
                     end
                 end
             )
@@ -595,6 +536,7 @@ NotifyOnNewObject("/Game/Gameplay/Feats/BaseTypes/F_RegenBase.F_RegenBase_C",
                     if not char then return end
 
                     local level = GetCharLevel(char)
+                    Log("HealingFactor: GetCharLevel returned " .. tostring(level))
                     local perLevels = cfg("HF_REGEN_PER_LEVELS", 3)
                     local bonus = math.floor(level / perLevels)
 
@@ -622,100 +564,182 @@ NotifyOnNewObject("/Game/Gameplay/Feats/BaseTypes/F_RegenBase.F_RegenBase_C",
 
 -- Load description table from language file
 local lang = cfg("LANGUAGE", "en")
-local descFile = SCRIPT_PATH .. "descriptions-" .. lang .. ".lua"
-local descLoader = loadfile(descFile)
-if not descLoader then
-    -- fallback to english
-    descLoader = loadfile(SCRIPT_PATH .. "descriptions-en.lua")
-end
+local descLoader = loadfile(SCRIPT_PATH .. "localization/descriptions-" .. lang .. ".lua")
+    or loadfile(SCRIPT_PATH .. "localization/descriptions-en.lua")
 local DESCRIPTIONS = descLoader and descLoader()(cfg) or {}
+
 -- descriptions-en.lua receives cfg function and returns a table:
 -- { ["/Game/Gameplay/Feats/F_LoneWolf.F_LoneWolf_C"] = "text", ... }
 
-local WidgetHookRegistered = false
-NotifyOnNewObject("/Game/Gui/Controls/CharAndCreation/FeatInfoWidget.FeatInfoWidget_C",
-    function()
-        if WidgetHookRegistered then return end
-        WidgetHookRegistered = true
+local _lastDescCount = -1
 
-        local ok, err = pcall(function()
-            RegisterHook("/Game/Gui/Controls/CharAndCreation/FeatInfoWidget.FeatInfoWidget_C:Construct",
-                function(self)
-                    local widget = self:get()
-                    if not widget then return end
-
-                    -- Read Feat Data to identify which feat this slot shows
-                    local featOk, featData = pcall(function()
-                        return widget:GetPropertyValue("Feat Data")
-                    end)
-                    if not featOk or not featData then return end
-
-                    local pathOk, fullName = pcall(function()
-                        return featData:GetClass():GetFullName()
-                    end)
-                    if not pathOk or not fullName then return end
-
-                    -- FullName: "BlueprintGeneratedClass /Game/...F_X.F_X_C"
-                    local classPath = fullName:match("BlueprintGeneratedClass (.*)")
-                    if not classPath then return end
-
-                    local desc = DESCRIPTIONS[classPath]
-                    if not desc then return end
-
-                    -- Write to Feat Description on the live widget instance
-                    pcall(function()
-                        widget:SetPropertyValue("Feat Description", FText(desc))
-                    end)
-
-                    -- Also push to the TextBlock directly as fallback
-                    pcall(function()
-                        local tb = widget:GetPropertyValue("TextBlockFeatDescription")
-                        if tb then tb:SetText(FText(desc)) end
-                    end)
-                end
-            )
-        end)
-
-        Log(ok and "Hook registered: FeatInfoWidget:Construct"
-            or "Hook FAILED: FeatInfoWidget | " .. tostring(err))
+-- ============================================================
+-- DESCRIPTION APPLICATION
+-- Called from multiple hook points to cover all UI states.
+-- Reads all live FeatInfoWidget instances + popup widgets
+-- directly off the screen object.
+-- ============================================================
+local function ApplyDescriptionsToWidgets()
+    -- Apply to all list slot widgets via FindAllOf
+    local widgets = FindAllOf("FeatInfoWidget_C")
+    local count = 0
+    if widgets then
+        for _, widget in ipairs(widgets) do
+            pcall(function()
+                if not widget:IsValid() then return end
+                local featData = widget:GetPropertyValue("Feat Data")
+                if not featData or not featData:IsValid() then return end
+                local fullName = featData:GetClass():GetFullName()
+                local classPath = fullName:match("BlueprintGeneratedClass (.*)")
+                if not classPath then return end
+                local desc = DESCRIPTIONS[classPath]
+                if not desc then return end
+                widget:SetPropertyValue("Feat Description", FText(desc))
+                pcall(function()
+                    local tb = widget:GetPropertyValue("TextBlockFeatDescription")
+                    if tb and tb:IsValid() then tb:SetText(FText(desc)) end
+                end)
+                count = count + 1
+            end)
+        end
     end
-)
+    if count ~= _lastDescCount then
+        Log("Descriptions applied: " .. count .. " widgets")
+        _lastDescCount = count
+    end
+end
+
+local function DeferredFull()
+    ExecuteInGameThread(ApplyDescriptionsToWidgets)
+end
 
 -- ============================================================
--- CONSOLE COMMANDS FOR TESTING
+-- DESCRIPTION POLLING
+-- Config: DESC_POLL_ENABLED (true/false), DESC_POLL_INTERVAL (ms)
+-- Runs ApplyDescriptionsToWidgets repeatedly while a char
+-- screen is open. Uses self-rescheduling via ExecuteInGameThread.
+-- Guards: pollActive flag stops the loop when screen closes.
+--         pollRunning prevents multiple loops running at once.
 -- ============================================================
-RegisterConsoleCommandHandler("AddFeatPoints", function(args)
-    local amount = tonumber(args[1]) or 5
-    local pc = GetPlayerController()
-    local char = pc and pc:GetPawn()
-    if char then
-        local current = char:GetPropertyValue("FeatPoints") or 0
-        char:SetPropertyValue("FeatPoints", current + amount)
-        Log("Added " .. amount .. " feat points. Total now: " .. (current + amount))
-    else
-        Log("AddFeatPoints: Player character not found")
+local pollEnabled  = cfg("DESC_POLL_ENABLED", true)
+local pollInterval = cfg("DESC_POLL_INTERVAL", 500)
+local pollActive   = false
+local pollRunning  = false
+
+local function PollTick()
+    if not pollActive then
+        pollRunning = false
+        Log("Description polling stopped")
+        return
+    end
+    ApplyDescriptionsToWidgets()
+    -- Reschedule next tick
+    local start = os.clock()
+    local intervalSec = pollInterval / 1000.0
+    local skipCount = 0
+    local function Wait()
+        if not pollActive then
+            pollRunning = false
+            return
+        end
+        skipCount = skipCount + 1
+        if skipCount < 10 then
+            ExecuteInGameThread(Wait)
+        else
+            skipCount = 0
+            if os.clock() - start >= intervalSec then
+                PollTick()
+            else
+                ExecuteInGameThread(Wait)
+            end
+        end
+    end
+    ExecuteInGameThread(Wait)
+end
+
+local function StartPolling()
+    if not pollEnabled then return end
+    pollActive = true
+    if pollRunning then return end
+    pollRunning = true
+    Log("Description polling started")
+    -- Initial delay before first tick so screen widgets are populated
+    local start = os.clock()
+    local intervalSec = pollInterval / 1000.0
+    local function WaitFirst()
+        ExecuteInGameThread(function()
+            if os.clock() - start >= intervalSec then
+                PollTick()
+            else
+                WaitFirst()
+            end
+        end)
+    end
+    WaitFirst()
+end
+
+local function StopPolling()
+    if not pollActive then return end
+    pollActive = false
+    -- pollRunning clears itself in PollTick when it sees pollActive = false
+end
+
+-- ============================================================
+-- CHAR SCREEN HOOKS
+-- OnWindowOpened  — screen opens fresh
+-- Select Feat     — feat selected in add-feat list (popup opens)
+-- Close Feat Popup — popup closes, list needs redraw
+--                    We apply BOTH list and popup here with a
+--                    longer defer to win the race vs vanilla redraw
+-- ============================================================
+local CharScreenHooked = false
+NotifyOnNewObject("/Game/Gui/Screens/GuiCharScreen.GuiCharScreen_C", function()
+    if CharScreenHooked then return end
+    CharScreenHooked = true
+
+    local hooks = {
+        { "OnWindowOpened", function() StartPolling() end },
+        { "OnWindowClosed", function() StopPolling() end },
+    }
+
+    for _, h in ipairs(hooks) do
+        local name, fn = h[1], h[2]
+        local ok, err = pcall(function()
+            RegisterHook("/Game/Gui/Screens/GuiCharScreen.GuiCharScreen_C:" .. name, fn)
+        end)
+        Log(ok and "Hook registered: GuiCharScreen:" .. name
+            or "Hook FAILED: GuiCharScreen:" .. name .. " | " .. tostring(err))
     end
 end)
 
-RegisterConsoleCommandHandler("RemoveAllFeats", function()
-    local pc = GetPlayerController()
-    local char = pc and pc:GetPawn()
-    if not char then
-        Log("RemoveAllFeats: Player character not found")
-        return
-    end
+-- ============================================================
+-- CHAR CREATION HOOKS
+-- Init            — screen first opens
+-- SetCharInfo     — char data refreshes (stat changes etc)
+-- On Feat Clicked — feat selected, popup shown
+-- On Feat State Changed — feat learned/removed
+-- ============================================================
+local CharCreationHooked = false
+NotifyOnNewObject("/Game/Gui/Screens/GuiCharCreation.GuiCharCreation_C", function()
+    if CharCreationHooked then return end
+    CharCreationHooked = true
 
-    local featComp = char:GetComponentByClass(UE.UClass.Load("/Script/ColonyShip.FeatComponent"))
-    if not featComp then
-        Log("RemoveAllFeats: No FeatComponent found.")
-        return
-    end
+    local hooks = {
+        { "Init",                  function() StartPolling() end },
+        { "SetCharInfo",           function() DeferredFull() end },
+        { "On Feat Clicked",       function() DeferredFull() end },
+        { "On Feat State Changed", function() DeferredFull() end },
+        { "OnWindowClosed",        function() StopPolling() end },
+    }
 
-    local featCount = featComp:GetFeatCount() -- method name may vary
-    Log("Removing " .. featCount .. " feats and refunding points.")
-    featComp:ClearAllFeats()
-    char:SetPropertyValue("FeatPoints", (char:GetPropertyValue("FeatPoints") or 0) + featCount)
-    Log("Feats cleared. Points refunded.")
+    for _, h in ipairs(hooks) do
+        local name, fn = h[1], h[2]
+        local ok, err = pcall(function()
+            RegisterHook("/Game/Gui/Screens/GuiCharCreation.GuiCharCreation_C:" .. name, fn)
+        end)
+        Log(ok and "Hook registered: GuiCharCreation:" .. name
+            or "Hook FAILED: GuiCharCreation:" .. name .. " | " .. tostring(err))
+    end
 end)
 
 print("[Perks Rebalance] All hooks, descriptions, and commands registered.\n")

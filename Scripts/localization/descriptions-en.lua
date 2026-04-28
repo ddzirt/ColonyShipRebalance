@@ -15,10 +15,10 @@ return function(cfg)
             " Armor Handling.",
 
         ["/Game/Gameplay/Feats/F_Berserker.F_Berserker_C"] =
-            "HP > " .. math.floor(cfg("BERSERK_MID_HP_PCT", 0.50) * 100) .. "%: no bonus. " ..
+            "Melee: Attack cost -1, Aimed attacks are permanently disabled, when " ..
             "HP <= " .. math.floor(cfg("BERSERK_MID_HP_PCT", 0.50) * 100) .. "%: +1 Melee DMG. " ..
             "HP <= " .. math.floor(cfg("BERSERK_LOW_HP_PCT", 0.25) * 100) .. "%: +2 Melee DMG. " ..
-            "HP <=13: +2.",
+            "HP <=13: +2 Melee DMG.",
 
         ["/Game/Gameplay/Feats/F_Basher.F_Basher_C"] =
             "Blunt: +" .. cfg("BASHER_THC", 8) .. "% accuracy, +" ..
@@ -31,12 +31,13 @@ return function(cfg)
             cfg("BUTCHER_PEN_PER_LEVEL", 2) .. "% penetration per Melee skill level.",
 
         ["/Game/Gameplay/Feats/F_H_Juggernaut.F_H_Juggernaut_C"] =
-            "HP > " .. math.floor(cfg("JUGG_MID_HP_PCT", 0.50) * 100) .. "%: +1 DR. HP <= " ..
-            math.floor(cfg("JUGG_MID_HP_PCT", 0.50) * 100) .. "%: +2 DR. HP <= " ..
-            math.floor(cfg("JUGG_LOW_HP_PCT", 0.25) * 100) .. "%: +3 DR. HP <=13: vanilla +4 DR.",
+            "Knockdowns become Stuns, melee damage +2, Armor skill gain +100%, " ..
+            "HP > " .. math.floor(cfg("JUGG_MID_HP_PCT", 0.50) * 100) .. "%: +1 Natural DR. HP <= " ..
+            math.floor(cfg("JUGG_MID_HP_PCT", 0.50) * 100) .. "%: +2 Natural DR. HP <= " ..
+            math.floor(cfg("JUGG_LOW_HP_PCT", 0.25) * 100) .. "%: +3 Natural DR. HP <=13: +4 DR.",
 
         ["/Game/Gameplay/Feats/F_Educated.F_Educated_C"] =
-            "+1 Tagged Skill, +25% Extra Experience (works retroactively) " ..
+            "+1 Tagged Skill, +25% Extra Experience (works retroactively). " ..
             "INT >= " .. cfg("EDUCATED_INT_MIN", 6) .. ": +" ..
             cfg("EDUCATED_SXP_BONUS", 5) .. "% Skill XP gain.",
 
@@ -70,6 +71,6 @@ return function(cfg)
         ["/Game/Gameplay/Feats/F_ToughBastard.F_ToughBastard_C"] =
             "HP +10, enemy's critical damage is halved. " ..
             "CON >= " .. cfg("TB_CON", 6) ..
-            " required. Below threshold all bonuses are suppressed.",
+            " required, if less does nothing.",
     }
 end
