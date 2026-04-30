@@ -7,10 +7,10 @@ return function(cfg)
             "+" .. cfg("LW_EVASION", 16) .. " Evasion, +" ..
             cfg("LW_INITIATIVE", 20) .. " Initiative, +" ..
             cfg("LW_ARMOR_PENALTY", 4) .. " Armor Handling," ..
-            " Critical Chance +6% when working alone, harder to bond with Companions.",
+            " Critical Chance +6% when alone, harder to bond with Companions.",
 
         ["/Game/Gameplay/Feats/F_Warrior.F_Warrior_C"] =
-            "Melee: 25% skill gain (retroactive), Accuracy +6, Per Melee skill level: +1% Evasion, +1% Accuracy, +" ..
+            "Melee: 25% skill gain, Accuracy +6, Per Melee skill level: +1% Evasion, +1% Accuracy, +" ..
             cfg("WARRIOR_ARMOR_PER_LEVEL", 1) ..
             " Armor Handling.",
 
@@ -37,7 +37,7 @@ return function(cfg)
             math.floor(cfg("JUGG_LOW_HP_PCT", 0.25) * 100) .. "%: +3 Natural DR. HP <=13: +4 DR.",
 
         ["/Game/Gameplay/Feats/F_Educated.F_Educated_C"] =
-            "+1 Tagged Skill, +25% Extra Experience (works retroactively). " ..
+            "+1 Tagged Skill, +25% Extra Experience. " ..
             "INT >= " .. cfg("EDUCATED_INT_MIN", 6) .. ": +" ..
             cfg("EDUCATED_SXP_BONUS", 5) .. "% Skill XP gain.",
 
@@ -51,8 +51,8 @@ return function(cfg)
 
         ["/Game/Gameplay/Feats/F_H_HealingFactor.F_H_HealingFactor_C"] =
             "CON +2, Regeneration +3, Stat Healing +1, Max Implants +2, Biotech skill gain +100%, " ..
-            "Regeneration increases per level = floor(level / " ..
-            cfg("HF_REGEN_PER_LEVELS", 3) .. ").",
+            "Regeneration increases per level = level / " ..
+            cfg("HF_REGEN_PER_LEVELS", 3) .. ".",
 
         ["/Game/Gameplay/Feats/F_H_FastRunner.F_H_FastRunner_C"] =
             "+6 AP to movement, +" ..
