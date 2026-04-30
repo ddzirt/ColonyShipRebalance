@@ -105,6 +105,7 @@ Most changes are exposed in config.ini and can be tuned.
 
 ### Gifted (Heroic)
 
+* Grants +4 to stats(+1 to original)
 * Additionally grants +5% Skill XP gain.
 
 ### Healing Factor (Heroic)
