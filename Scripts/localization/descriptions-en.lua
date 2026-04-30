@@ -54,7 +54,7 @@ return function(cfg)
             "Regeneration increases per level = floor(level / " ..
             cfg("HF_REGEN_PER_LEVELS", 3) .. ").",
 
-        ["/Game/Gameplay/Feats/F_FastRunner.F_FastRunner_C"] =
+        ["/Game/Gameplay/Feats/F_H_FastRunner.F_H_FastRunner_C"] =
             "+6 AP to movement, +" ..
             cfg("FR_EVASION", 6) .. " Evasion, Initiative +24, disables enemy Reaction, Evasion skill gain +100%",
 

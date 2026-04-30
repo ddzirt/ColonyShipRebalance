@@ -1,745 +1,209 @@
-print("\n[Perks Rebalance] Starting...\n")
+-- ============================================================
+-- Colony Ship Feat Description Mod
+-- UE4SS standard patterns (no global 'UE4' dependency)
+-- ============================================================
 
--- ============================================================
--- SCRIPT PATH
--- ============================================================
+-- ------------------------------------------------------------------------
+-- Script Path & Logging
+-- ------------------------------------------------------------------------
 local function get_script_path()
     local path = debug.getinfo(1, "S").source:sub(2)
     return path:match("(.*[/\\])") or "./"
 end
+
 local SCRIPT_PATH = get_script_path()
+local CONFIG_PATH = SCRIPT_PATH .. "config.ini"
+local LANG_PATH = SCRIPT_PATH .. "localization/"
 
--- ============================================================
--- CONFIG LOADER
--- Reads config.ini next to main.lua
--- Format: KEY=VALUE, one per line, # for comments
--- ============================================================
-local function LoadConfig()
-    local cfg = {}
-    local f = io.open(SCRIPT_PATH .. "config.ini", "r")
-    if not f then return cfg end
-    for line in f:lines() do
-        line = line:match("^%s*(.-)%s*$")
-        if line ~= "" and not line:match("^#") then
-            local k, v = line:match("^([%w_]+)%s*=%s*(.+)$")
-            if k and v then
-                if v == "true" then
-                    cfg[k] = true
-                elseif v == "false" then
-                    cfg[k] = false
-                elseif tonumber(v) then
-                    cfg[k] = tonumber(v)
-                else
-                    cfg[k] = v
-                end
-            end
-        end
-    end
-    f:close()
-    return cfg
-end
-
-local C = LoadConfig()
-local function cfg(key, default)
-    return C[key] ~= nil and C[key] or default
-end
-
--- ============================================================
--- LOGGING
--- ============================================================
 local logPath = SCRIPT_PATH .. "RebalanceLog.txt"
-io.open(logPath, "w"):write("[Perks Rebalance] Session start.\n"):close()
-
 local function Log(msg)
     local f = io.open(logPath, "a")
     if f then
         f:write(msg .. "\n")
         f:close()
     end
-    print("[Perks Rebalance] " .. msg)
+    print("[FeatRebalance] " .. msg .. "\n")
 end
 
--- ============================================================
--- FIELD HELPERS
--- ============================================================
-local function Set(ref, field, value)
-    local ok, err = pcall(function() ref[field] = value end)
-    if not ok then Log("SET FAILED [" .. field .. "]: " .. tostring(err)) end
-end
+Log("[INFO] Mod initialized. Script path: " .. SCRIPT_PATH)
 
-local function GetEffects(Effects)
-    local ok, ref = pcall(function() return Effects:get() end)
-    return ok and ref or nil
-end
-
-local function GetChar(OwnerCharacter)
-    local ok, char = pcall(function() return OwnerCharacter:get() end)
-    return ok and char or nil
-end
-
-local function IsConditionMet(IsValid)
-    local ok, val = pcall(function() return IsValid:get() end)
-    return ok and val == true
-end
-
-local function GetCharLevel(char)
-    local ok, lv = pcall(function() return char:GetCharLevel() end)
-    return ok and lv or 0
-end
-
-local function GetHP(char)
-    local hpOk, hp     = pcall(function() return char:GetPropertyValue("HP") end)
-    local mhpOk, maxHp = pcall(function() return char:GetPropertyValue("MaxHP") end)
-    if hpOk and hp and mhpOk and maxHp and maxHp > 0 then
-        return hp, maxHp, hp / maxHp
+-- ------------------------------------------------------------------------
+-- INI Parser (plain Lua)
+-- ------------------------------------------------------------------------
+local function ParseIni(filePath)
+    local f = io.open(filePath, "r")
+    if not f then return {} end
+    local content = f:read("*a")
+    f:close()
+    local result = {}
+    for line in content:gmatch("[^\r\n]+") do
+        line = line:match("^%s*(.-)%s*$")
+        if line ~= "" and not line:match("^[;#]") then
+            local key, value = line:match("^(%w+)%s*=%s*(.+)$")
+            if key and value then
+                local num = tonumber(value)
+                result[key] = num or value
+            end
+        end
     end
-    return nil, nil, nil
+    return result
 end
 
--- ============================================================
--- FIELD CONSTANTS  (CsgCharEffects — full mangled names)
--- ============================================================
-local F = {
-    Evasion         = "EvasionMod_76_5A03A1C64111532DC77320909200AA8C",
-    Initiative      = "InitiativeMod_140_36D637CF4AF656392EE046A05B615F11",
-    MaxAP           = "MaxAPMod_83_04CD14B24ACBF706E9CC78BAB1296612",
-    ArmorPenalty    = "ArmorPenaltyMod_82_40D594EA4C29457956FCF582A15792C2",
-    MeleeTHC        = "MeleeTHCMod_68_E0C338BB45331F54E7D9F886B676B652",
-    MeleeCSC        = "MeleeCSCMod_69_894119434B15B7D76F8BC58A0C3B60DF",
-    MeleeMinDMG     = "MeleeMinDMGMod_92_94EA5AF74C9ED716E05B908931335051",
-    MeleeMaxDMG     = "MeleeMaxDMGMod_137_C4191C38408183538BE5049AB7D545E1",
-    NaturalDR       = "NaturalDRMod_105_0D15FF214A7CB826380DFFA3CBE5B518",
-    KnockdownChance = "KnockdownChanceMod_107_FDDD792C49AC81324BCA7BB7C8BE559A",
-    PenetrationPct  = "PenetrationPercentMod_111_1177A0254CB2DF505A72B8A6C9451C02",
-    AimedTHC        = "MarksmanshipAimedTHCMod_120_0434BD96457EA01836B0159A3D930E6C",
-    MaxHP           = "MaxHPMod_84_435ACAD04EFCD7C7108DE3AFCB43BD4D",
-    SkillXPGain     = "SkillXPGainMod_224_A0747CE04E2A3303C8681C9398E3577E",
-    CSC             = "CSCMod_16_167EDCF94FF53F08D293809DB72CAF5A",
-    HPRegen         = "HPRegenerationRateMod_57_F3F3ACE741EDD3E2CE40168C00C5D1D8",
+-- Default values (can be overridden in config.ini)
+local DEFAULTS = {
+    LANGUAGE = "en",
+    LW_EVASION = 16,
+    LW_INITIATIVE = 20,
+    LW_ARMOR_PENALTY = 4,
+    WARRIOR_ARMOR_PER_LEVEL = 1,
+    BERSERK_MID_HP_PCT = 0.50,
+    BERSERK_LOW_HP_PCT = 0.25,
+    BASHER_THC = 8,
+    BASHER_KNOCKDOWN = 20,
+    BASHER_AIMED_PER_LEVEL = 2,
+    BUTCHER_THC = 8,
+    BUTCHER_CSC = 20,
+    BUTCHER_PEN_PER_LEVEL = 2,
+    JUGG_MID_HP_PCT = 0.50,
+    JUGG_LOW_HP_PCT = 0.25,
+    EDUCATED_SXP_BONUS = 5,
+    EDUCATED_INT_MIN = 6,
+    MASTERMIND_SXP_BONUS = 5,
+    GIFTED_SKILL_SXP = 5,
+    HF_REGEN_PER_LEVELS = 3,
+    FR_EVASION = 6,
+    GLADIATOR_MIN = 1,
+    GLADIATOR_MAX = 1,
+    HH_PER = 3,
+    HH_CRIT_PER_STEP = 1,
+    TB_CON = 6,
 }
 
--- ============================================================
--- HOOK HELPERS
--- ============================================================
-local function HookFeat(classPath, fnName, callback)
-    local registered = false
-    NotifyOnNewObject(classPath, function()
-        if registered then return end
-        registered = true
-        local ok, err = pcall(function()
-            RegisterHook(classPath .. ":" .. fnName, callback)
-        end)
-        if ok then
-            Log("Hook registered: " .. classPath)
+local cfg = {}
+
+local function loadConfig()
+    local iniData = ParseIni(CONFIG_PATH)
+    for k, v in pairs(DEFAULTS) do
+        cfg[k] = (iniData[k] ~= nil) and iniData[k] or v
+    end
+    Log("[INFO] Config loaded from " .. CONFIG_PATH)
+end
+
+-- ------------------------------------------------------------------------
+-- Load descriptions from external Lua file (returns a function cfg → table)
+-- ------------------------------------------------------------------------
+local function loadDescriptions()
+    local lang = cfg.LANGUAGE or "en"
+    local descFile = LANG_PATH .. "descriptions-" .. lang .. ".lua"
+    Log("[INFO] Loading descriptions from " .. descFile)
+    local loader = loadfile(descFile)
+    if not loader then
+        Log("[WARN] Language file not found: " .. descFile .. " – falling back to en")
+        loader = loadfile(LANG_PATH .. "descriptions-en.lua")
+    end
+    if not loader then
+        Log("[ERROR] No descriptions file found!")
+        return {}
+    end
+    local ok, descFunc = pcall(loader)
+    if not ok or type(descFunc) ~= "function" then
+        Log("[ERROR] Failed to load descriptions: " .. tostring(descFunc))
+        return {}
+    end
+    local descriptions = descFunc(function(key, default)
+        return cfg[key] or default
+    end)
+
+    -- FIX 1: #descriptions returns 0 for hash tables (string keys).
+    -- Count entries correctly with pairs().
+    local count = 0
+    for _ in pairs(descriptions or {}) do count = count + 1 end
+
+    if count == 0 then
+        Log("[WARN] Descriptions table is empty")
+    else
+        Log("[INFO] Loaded " .. count .. " description entries")
+    end
+    return descriptions or {}
+end
+
+-- ------------------------------------------------------------------------
+-- Patch feat descriptions
+-- ------------------------------------------------------------------------
+local function PatchFeatDescriptions(descriptions)
+    Log("[INFO] Patching feat descriptions...")
+
+    local updated = 0
+    local failed  = 0
+
+    for classPath, descText in pairs(descriptions) do
+        -- Derive CDO path from class path.
+        -- Input:  /Game/Gameplay/Feats/F_LoneWolf.F_LoneWolf_C
+        -- Output: /Game/Gameplay/Feats/F_LoneWolf.Default__F_LoneWolf_C
+        local packagePath, className = classPath:match("^(.+)%.(.+)$")
+        if not packagePath or not className then
+            Log("[WARN] Could not parse classPath: " .. classPath)
+            failed = failed + 1
         else
-            Log("Hook FAILED: " .. classPath .. " | " .. tostring(err))
+            local cdoPath = packagePath .. ".Default__" .. className
+            local cdo = StaticFindObject(cdoPath)
+            if cdo and cdo:IsValid() then
+                cdo:SetPropertyValue("Description", FText(descText))
+                updated = updated + 1
+                Log("[INFO] Patched: " .. cdoPath)
+            else
+                Log("[WARN] CDO not found: " .. cdoPath)
+                failed = failed + 1
+            end
+        end
+    end
+
+    Log("[INFO] Patched " .. updated .. " / " .. (updated + failed) .. " feat descriptions")
+    return updated > 0
+end
+
+-- ------------------------------------------------------------------------
+-- Main mod logic
+-- ------------------------------------------------------------------------
+local descriptions = nil
+
+local function RunMod()
+    loadConfig()
+    if not descriptions then
+        descriptions = loadDescriptions()
+    end
+    if not descriptions or next(descriptions) == nil then
+        Log("[ERROR] No descriptions loaded")
+        return false
+    end
+    return PatchFeatDescriptions(descriptions)
+end
+
+-- ------------------------------------------------------------------------
+-- Trigger: RegisterInitGameStatePostHook fires after the game state is
+-- fully initialized — GameInstance and all its data (including Feats DB)
+-- are guaranteed to be populated at this point.
+-- This replaces all polling: one clean hook, fires at the right moment.
+-- ------------------------------------------------------------------------
+RegisterInitGameStatePostHook(function()
+    Log("[INFO] InitGameState fired — applying feat descriptions")
+    ExecuteInGameThread(function()
+        local ok = RunMod()
+        if not ok then
+            Log("[WARN] PatchFeatDescriptions returned false after InitGameState")
         end
     end)
-end
-
--- Single shared hook for all feats that inherit without overriding
-local FeatBaseHooked  = false
-local RegenBaseHooked = false
-
-local function GetFeatClassName(self)
-    local ok, cls = pcall(function() return self:get():GetClass() end)
-    if not ok or not cls then return "" end
-    local nok, name = pcall(function() return cls:GetFullName() end)
-    return nok and (name or "") or ""
-end
-
--- ============================================================
--- LONE WOLF
--- Vanilla (solo): +12 Evasion, +16 Initiative
--- Rebalanced:     +16 Evasion, +20 Initiative
---                 +4 ArmorPenalty (reduces heavy armor AP cost)
--- Config: LW_EVASION, LW_INITIATIVE, LW_ARMOR_PENALTY
--- ============================================================
-HookFeat("/Game/Gameplay/Feats/F_LoneWolf.F_LoneWolf_C",
-    "Get Conditional Effects",
-    function(self, OwnerCharacter, Effects, IsValid)
-        local ref = GetEffects(Effects)
-        if not ref or not IsConditionMet(IsValid) then return end
-
-        Set(ref, F.Evasion, cfg("LW_EVASION", 16))
-        Set(ref, F.Initiative, cfg("LW_INITIATIVE", 20))
-        Set(ref, F.ArmorPenalty, cfg("LW_ARMOR_PENALTY", 4))
-        Log("LoneWolf: applied")
-    end
-)
-
--- ============================================================
--- WARRIOR
--- Vanilla: THC and CSC bonuses per melee skill level
--- Addition: +ArmorHandling named ArmorPenalty in code per skill level (armor becomes usable
---           without needing STR 10 Juggernaut)
--- Config: WARRIOR_ARMOR_PER_LEVEL
--- ============================================================
-HookFeat("/Game/Gameplay/Feats/F_Warrior.F_Warrior_C",
-    "Get Conditional Effects",
-    function(self, OwnerCharacter, Effects, IsValid)
-        local ref = GetEffects(Effects)
-        if not ref or not IsConditionMet(IsValid) then return end
-
-        local skillLevel = 1
-        local char = GetChar(OwnerCharacter)
-        if char then
-            -- Melee skill is a UObject; try reading level from it directly
-            for _, name in ipairs({ "MeleeSkill", "Melee", "MeleeLevel", "SkillMelee" }) do
-                local ok, skillObj = pcall(function() return char:GetPropertyValue(name) end)
-                if ok and skillObj then
-                    -- Try common level accessor methods/properties on the skill object
-                    for _, lvlName in ipairs({ "Level", "SkillLevel", "CurrentLevel", "Rank" }) do
-                        local lok, lv = pcall(function() return skillObj:GetPropertyValue(lvlName) end)
-                        if lok and lv and type(lv) == "number" and lv > 0 then
-                            skillLevel = lv
-                            Log("Skill level found: " .. name .. "." .. lvlName .. " = " .. lv)
-                            break
-                        end
-                    end
-                    if skillLevel > 1 then break end
-                end
-            end
-        end
-
-        local bonus = skillLevel * cfg("WARRIOR_ARMOR_PER_LEVEL", 1)
-        -- Set directly, not additive, to avoid stacking across recalculations
-        Set(ref, F.ArmorPenalty, bonus)
-        Log("Warrior: ArmorHandling set to " .. bonus)
-    end
-)
-
--- ============================================================
--- BERSERKER
--- Vanilla: +2 MeleeDMG at <=13 HP
--- Rebalanced: same cap, distributed into tiers above threshold
---   >50% HP  : nothing (vanilla gives nothing)
---   <=50% HP : +1 min/max melee DMG
---   <=25% HP : +2 min/max melee DMG
---   <=13 HP  : vanilla fires its own +2, we do nothing
--- Config: BERSERK_MID_HP_PCT, BERSERK_LOW_HP_PCT
--- ============================================================
-HookFeat("/Game/Gameplay/Feats/F_Berserker.F_Berserker_C",
-    "Get Conditional Effects",
-    function(self, OwnerCharacter, Effects, IsValid)
-        local ref = GetEffects(Effects)
-        if not ref or not IsConditionMet(IsValid) then return end
-
-        local char = GetChar(OwnerCharacter)
-        if not char then return end
-
-        local hp, maxHp, pct = GetHP(char)
-        if not hp then return end
-
-        -- Only act above the vanilla threshold; below it vanilla handles
-        if hp > 13 then
-            if pct <= cfg("BERSERK_LOW_HP_PCT", 0.25) then
-                Set(ref, F.MeleeMinDMG, 2)
-                Set(ref, F.MeleeMaxDMG, 2)
-                Log("Berserker: tier 2 (" .. math.floor(pct * 100) .. "%)")
-            elseif pct <= cfg("BERSERK_MID_HP_PCT", 0.50) then
-                Set(ref, F.MeleeMinDMG, 1)
-                Set(ref, F.MeleeMaxDMG, 1)
-                Log("Berserker: tier 1 (" .. math.floor(pct * 100) .. "%)")
-            end
-        end
-    end
-)
-
--- ============================================================
--- BASHER (blunt weapons)
--- Vanilla: penetration
--- Rebalanced: blunt accuracy + knockdown + aimed THC per skill level
--- Config: BASHER_THC, BASHER_KNOCKDOWN, BASHER_AIMED_PER_LEVEL
--- ============================================================
-HookFeat("/Game/Gameplay/Feats/F_Basher.F_Basher_C",
-    "Get Conditional Effects",
-    function(self, OwnerCharacter, Effects, IsValid)
-        local ref = GetEffects(Effects)
-        if not ref or not IsConditionMet(IsValid) then return end
-
-        local skillLevel = 1
-        local char = GetChar(OwnerCharacter)
-        if char then
-            for _, name in ipairs({ "MeleeSkill", "Melee", "MeleeLevel", "SkillMelee" }) do
-                local ok, sv = pcall(function() return char:GetPropertyValue(name) end)
-                if ok and sv and type(sv) == "number" and sv > 0 then
-                    skillLevel = sv
-                    break
-                end
-            end
-        end
-
-        Set(ref, F.PenetrationPct, 0) -- remove any vanilla penetration
-        Set(ref, F.MeleeTHC, cfg("BASHER_THC", 8))
-        Set(ref, F.KnockdownChance, cfg("BASHER_KNOCKDOWN", 20))
-        Set(ref, F.AimedTHC, skillLevel * cfg("BASHER_AIMED_PER_LEVEL", 2))
-        Log("Basher: applied (aimed=" .. skillLevel * cfg("BASHER_AIMED_PER_LEVEL", 2) .. ")")
-    end
-)
-
--- ============================================================
--- BUTCHER (bladed weapons)
--- Vanilla: aimed bonus
--- Rebalanced: bladed accuracy + crit chance + penetration per skill level
--- Config: BUTCHER_THC, BUTCHER_CSC, BUTCHER_PEN_PER_LEVEL
--- ============================================================
-HookFeat("/Game/Gameplay/Feats/F_Butcher.F_Butcher_C",
-    "Get Conditional Effects",
-    function(self, OwnerCharacter, Effects, IsValid)
-        local ref = GetEffects(Effects)
-        if not ref or not IsConditionMet(IsValid) then return end
-
-        local skillLevel = 1
-        local char = GetChar(OwnerCharacter)
-        if char then
-            for _, name in ipairs({ "MeleeSkill", "Melee", "MeleeLevel", "SkillMelee" }) do
-                local ok, sv = pcall(function() return char:GetPropertyValue(name) end)
-                if ok and sv and type(sv) == "number" and sv > 0 then
-                    skillLevel = sv
-                    break
-                end
-            end
-        end
-
-        Set(ref, F.AimedTHC, 0) -- remove any vanilla aimed bonus
-        Set(ref, F.MeleeTHC, cfg("BUTCHER_THC", 8))
-        Set(ref, F.CSC, cfg("BUTCHER_CSC", 20))
-        Set(ref, F.PenetrationPct, skillLevel * cfg("BUTCHER_PEN_PER_LEVEL", 2))
-        Log("Butcher: applied (pen=" .. skillLevel * cfg("BUTCHER_PEN_PER_LEVEL", 2) .. ")")
-    end
-)
-
--- ============================================================
--- JUGGERNAUT (Heroic)
--- Vanilla: +1 NaturalDR always, +3 more at <=13 HP (total 4)
--- Rebalanced: same total cap, split into tiers above threshold
---   >50% HP  : +1 DR (vanilla, we set explicitly)
---   <=50% HP : +2 DR (we set)
---   <=25% HP : +3 DR (we set)
---   <=13 HP  : +4 DR (vanilla handles, we don't touch)
--- Config: JUGG_MID_HP_PCT, JUGG_LOW_HP_PCT
--- ============================================================
-HookFeat("/Game/Gameplay/Feats/F_H_Juggernaut.F_H_Juggernaut_C",
-    "Get Conditional Effects",
-    function(self, OwnerCharacter, Effects, IsValid)
-        local ref = GetEffects(Effects)
-        if not ref or not IsConditionMet(IsValid) then return end
-
-        local char = GetChar(OwnerCharacter)
-        if not char then return end
-
-        local hp, maxHp, pct = GetHP(char)
-
-        -- If we can't read HP, let vanilla handle everything
-        if not hp then return end
-
-        -- Only intercept above vanilla's threshold
-        if hp > 13 then
-            if pct <= cfg("JUGG_LOW_HP_PCT", 0.25) then
-                Set(ref, F.NaturalDR, 3)
-                Log("Juggernaut: tier 3 (" .. math.floor(pct * 100) .. "%)")
-            elseif pct <= cfg("JUGG_MID_HP_PCT", 0.50) then
-                Set(ref, F.NaturalDR, 2)
-                Log("Juggernaut: tier 2 (" .. math.floor(pct * 100) .. "%)")
-            else
-                Set(ref, F.NaturalDR, 1)
-            end
-        end
-        -- hp <= 13: vanilla fires its +4, we stay out of the way
-    end
-)
-
--- ============================================================
--- GLADIATOR
--- Addition: flat +1 min/max melee damage
--- Config: GLADIATOR_MIN, GLADIATOR_MAX
--- ============================================================
-HookFeat("/Game/Gameplay/Feats/F_Gladiator.F_Gladiator_C",
-    "Get Conditional Effects",
-    function(self, OwnerCharacter, Effects, IsValid)
-        local ref = GetEffects(Effects)
-        if not ref or not IsConditionMet(IsValid) then return end
-
-        Set(ref, F.MeleeMinDMG, cfg("GLADIATOR_MIN", 1))
-        Set(ref, F.MeleeMaxDMG, cfg("GLADIATOR_MAX", 1))
-        Log("Gladiator: +" .. cfg("GLADIATOR_MIN", 1) .. " min dmg +" .. cfg("GLADIATOR_MAX", 1) .. " max dmg applied")
-    end
-)
-
--- ============================================================
--- HEAVY HITTER
--- Addition: +1% Crit Chance per 3 Perception
--- Config: HH_PER
--- ============================================================
-HookFeat("/Game/Gameplay/Feats/F_HeavyHitter.F_HeavyHitter_C",
-    "Get Conditional Effects",
-    function(self, OwnerCharacter, Effects, IsValid)
-        local ref = GetEffects(Effects)
-        if not ref or not IsConditionMet(IsValid) then return end
-
-        local char = GetChar(OwnerCharacter)
-        if not char then return end
-
-        local perception = 0
-        for _, name in ipairs({ "Perception", "Per", "PERCEPTION" }) do
-            local ok, val = pcall(function() return char:GetPropertyValue(name) end)
-            if ok and val and type(val) == "number" then
-                perception = val
-                break
-            end
-        end
-
-        local critBonus = math.floor(perception / cfg("HH_PER", 3))
-        critBonus = critBonus * cfg("HH_CRIT_PER_STEP", 1)
-        if critBonus > 0 then
-            Set(ref, F.CSC, critBonus)
-            Log("HeavyHitter: +" .. critBonus .. "% CSC from " .. perception .. " Perception")
-        end
-    end
-)
-
--- ============================================================
--- FEATBASE HOOK
--- Handles all feats that inherit Get Conditional Effects
--- without overriding it: Educated, Mastermind, Gifted
--- ============================================================
-NotifyOnNewObject("/Game/Gameplay/Feats/BaseTypes/FeatBase.FeatBase_C",
-    function()
-        if FeatBaseHooked then return end
-        FeatBaseHooked = true
-
-        local ok, err = pcall(function()
-            RegisterHook("/Game/Gameplay/Feats/BaseTypes/FeatBase.FeatBase_C:Get Conditional Effects",
-                function(self, OwnerCharacter, Effects, IsValid)
-                    local className = GetFeatClassName(self)
-
-                    -- EDUCATED
-                    -- Vanilla: retroactive skill LP bonus on feat add (one-time)
-                    -- Addition: persistent +5% SkillXPGain each combat recalc. This is not the way. It has to be added once.
-                    -- Current implementation applies the bonus repeatedly, which might stack or
-                    -- overwrite unintendedly depending on game mechanics – but that is a separate investigation.
-                    -- Soft Int>=6 gate: bonus zeroed below threshold
-                    -- Config: EDUCATED_SXP_BONUS, EDUCATED_INT_MIN
-                    if className:find("F_Educated_C") then
-                        local ref = GetEffects(Effects)
-                        if not ref then return end
-
-                        local meetsReq = true
-                        local char = GetChar(OwnerCharacter)
-                        if char then
-                            for _, name in ipairs({ "Intelligence", "Int", "INTEL" }) do
-                                local iOk, iv = pcall(function() return char:GetPropertyValue(name) end)
-                                if iOk and iv and type(iv) == "number" then
-                                    meetsReq = iv >= cfg("EDUCATED_INT_MIN", 6)
-                                    break
-                                end
-                            end
-                        end
-
-                        if meetsReq then
-                            Set(ref, F.SkillXPGain, cfg("EDUCATED_SXP_BONUS", 5))
-                            Log("Educated: +" .. cfg("EDUCATED_SXP_BONUS", 5) .. "% SkillXP applied")
-                        else
-                            Log("Educated: Int<" .. cfg("EDUCATED_INT_MIN", 6) .. ", suppressed")
-                        end
-
-                        -- MASTERMIND (Heroic)
-                        -- Vanilla: bonus feat levels, Int-gated
-                        -- Addition: +5% SkillXPGain to address skill point
-                        --           deficit on Str-heavy solo builds
-                        -- Config: MASTERMIND_SXP_BONUS
-                    elseif className:find("F_H_Mastermind_C") then
-                        local ref = GetEffects(Effects)
-                        if not ref then return end
-                        Set(ref, F.SkillXPGain, cfg("MASTERMIND_SXP_BONUS", 5))
-                        Log("Mastermind: +" .. cfg("MASTERMIND_SXP_BONUS", 5) .. "% SkillXP applied")
-
-                        -- GIFTED (Heroic)
-                        -- Vanilla: +4 stat points, +4 skill points at creation
-                        -- Addition: +5% SkillXPGain (makes ongoing play
-                        --           competitive with Mastermind/Educated)
-                        -- Config: GIFTED_SKILL_SXP
-                    elseif className:find("F_Gifted_C") then
-                        local ref = GetEffects(Effects)
-                        if not ref then return end
-                        Set(ref, F.SkillXPGain, cfg("GIFTED_SKILL_SXP", 5))
-                        Log("Gifted: +" .. cfg("GIFTED_SKILL_SXP", 5) .. "% SkillXP applied")
-
-                        -- FAST RUNNER
-                        -- Addition: +6 Evasion
-                        -- Config: FR_EVASION
-                    elseif className:find("F_FastRunner_C") then
-                        local ref = GetEffects(Effects)
-                        if not ref then return end
-                        Set(ref, F.Evasion, cfg("FR_EVASION", 6))
-                        Log("FastRunner: +" .. cfg("FR_EVASION", 6) .. " Evasion," .. " applied")
-
-                        -- TOUGH BASTARD
-                        -- Requirement: Constitution >= 6, otherwise all benefits suppressed
-                        -- Config: TB_CON
-                    elseif className:find("F_ToughBastard_C") then
-                        local ref = GetEffects(Effects)
-                        if not ref then return end
-                        local char = GetChar(OwnerCharacter)
-                        local meetsReq = true
-                        if char then
-                            for _, name in ipairs({ "Constitution", "Con", "CON" }) do
-                                local cOk, cv = pcall(function() return char:GetPropertyValue(name) end)
-                                if cOk and cv and type(cv) == "number" then
-                                    meetsReq = cv >= cfg("TB_CON", 6)
-                                    break
-                                end
-                            end
-                        end
-                        if not meetsReq then
-                            -- Zero all fields vanilla would set — suppress entire feat
-                            Set(ref, F.MaxHP, 0)
-                            Set(ref, F.NaturalDR, 0)
-                            Log("ToughBastard: CON requirement not met, suppressed")
-                        else
-                            Log("ToughBastard: active")
-                        end
-                    end
-                end
-            )
-        end)
-        if ok then
-            Log("Hook registered: FeatBase")
-        else
-            Log("Hook FAILED: FeatBase | " .. tostring(err))
-        end
-    end
-)
-
--- ============================================================
--- REGENBASE HOOK (Healing Factor)
--- Vanilla: flat HP regen per turn (doesn't scale with level)
--- Rebalanced: HPRegen = floor(character level / HF_REGEN_PER_LEVELS)
--- Config: HF_REGEN_PER_LEVELS
--- ============================================================
-NotifyOnNewObject("/Game/Gameplay/Feats/BaseTypes/F_RegenBase.F_RegenBase_C",
-    function()
-        if RegenBaseHooked then return end
-        RegenBaseHooked = true
-
-        local ok, err = pcall(function()
-            RegisterHook("/Game/Gameplay/Feats/BaseTypes/F_RegenBase.F_RegenBase_C:Get Conditional Effects",
-                function(self, OwnerCharacter, Effects, IsValid)
-                    local className = GetFeatClassName(self)
-                    if not className:find("F_H_HealingFactor_C") then return end
-
-                    local ref = GetEffects(Effects)
-                    if not ref then return end
-
-                    local char = GetChar(OwnerCharacter)
-                    if not char then return end
-
-                    local level = GetCharLevel(char)
-                    Log("HealingFactor: GetCharLevel returned " .. tostring(level))
-                    local perLevels = cfg("HF_REGEN_PER_LEVELS", 3)
-                    local bonus = math.floor(level / perLevels)
-
-                    -- Override vanilla completely; set absolute value
-                    Set(ref, F.HPRegen, bonus)
-                    Log("HealingFactor: level " .. level .. " -> HPRegen set to " .. bonus)
-                end
-            )
-        end)
-        if ok then
-            Log("Hook registered: RegenBase")
-        else
-            Log("Hook FAILED: RegenBase | " .. tostring(err))
-        end
-    end
-)
-
--- ============================================================
--- DESCRIPTION SYSTEM
--- Hook FeatInfoWidget_C:Construct — fires when each feat slot
--- is populated. Read Feat Data to identify feat, write our
--- text to Feat Description on the live widget instance.
--- Descriptions loaded from descriptions-[lang].lua
--- ============================================================
-
--- Load description table from language file
-local lang = cfg("LANGUAGE", "en")
-local descLoader = loadfile(SCRIPT_PATH .. "localization/descriptions-" .. lang .. ".lua")
-    or loadfile(SCRIPT_PATH .. "localization/descriptions-en.lua")
-local DESCRIPTIONS = descLoader and descLoader()(cfg) or {}
-
--- descriptions-en.lua receives cfg function and returns a table:
--- { ["/Game/Gameplay/Feats/F_LoneWolf.F_LoneWolf_C"] = "text", ... }
-
-local _lastDescCount = -1
-
--- ============================================================
--- DESCRIPTION APPLICATION
--- Called from multiple hook points to cover all UI states.
--- Reads all live FeatInfoWidget instances + popup widgets
--- directly off the screen object.
--- ============================================================
-local function ApplyDescriptionsToWidgets()
-    -- Apply to all list slot widgets via FindAllOf
-    local widgets = FindAllOf("FeatInfoWidget_C")
-    local count = 0
-    if widgets then
-        for _, widget in ipairs(widgets) do
-            pcall(function()
-                if not widget:IsValid() then return end
-                local featData = widget:GetPropertyValue("Feat Data")
-                if not featData or not featData:IsValid() then return end
-                local fullName = featData:GetClass():GetFullName()
-                local classPath = fullName:match("BlueprintGeneratedClass (.*)")
-                if not classPath then return end
-                local desc = DESCRIPTIONS[classPath]
-                if not desc then return end
-                widget:SetPropertyValue("Feat Description", FText(desc))
-                pcall(function()
-                    local tb = widget:GetPropertyValue("TextBlockFeatDescription")
-                    if tb and tb:IsValid() then tb:SetText(FText(desc)) end
-                end)
-                count = count + 1
-            end)
-        end
-    end
-    if count ~= _lastDescCount then
-        Log("Descriptions applied: " .. count .. " widgets")
-        _lastDescCount = count
-    end
-end
-
-local function DeferredFull()
-    ExecuteInGameThread(ApplyDescriptionsToWidgets)
-end
-
--- ============================================================
--- DESCRIPTION POLLING
--- Config: DESC_POLL_ENABLED (true/false), DESC_POLL_INTERVAL (ms)
--- Runs ApplyDescriptionsToWidgets repeatedly while a char
--- screen is open. Uses self-rescheduling via ExecuteInGameThread.
--- Guards: pollActive flag stops the loop when screen closes.
---         pollRunning prevents multiple loops running at once.
--- ============================================================
-local pollEnabled  = cfg("DESC_POLL_ENABLED", true)
-local pollInterval = cfg("DESC_POLL_INTERVAL", 500)
-local pollActive   = false
-local pollRunning  = false
-
-local function PollTick()
-    if not pollActive then
-        pollRunning = false
-        Log("Description polling stopped")
-        return
-    end
-    ApplyDescriptionsToWidgets()
-    -- Reschedule next tick
-    local start = os.clock()
-    local intervalSec = pollInterval / 1000.0
-    local skipCount = 0
-    local function Wait()
-        if not pollActive then
-            pollRunning = false
-            return
-        end
-        skipCount = skipCount + 1
-        if skipCount < 10 then
-            ExecuteInGameThread(Wait)
-        else
-            skipCount = 0
-            if os.clock() - start >= intervalSec then
-                PollTick()
-            else
-                ExecuteInGameThread(Wait)
-            end
-        end
-    end
-    ExecuteInGameThread(Wait)
-end
-
-local function StartPolling()
-    if not pollEnabled then return end
-    pollActive = true
-    if pollRunning then return end
-    pollRunning = true
-    Log("Description polling started")
-    -- Initial delay before first tick so screen widgets are populated
-    local start = os.clock()
-    local intervalSec = pollInterval / 1000.0
-    local function WaitFirst()
-        ExecuteInGameThread(function()
-            if os.clock() - start >= intervalSec then
-                PollTick()
-            else
-                WaitFirst()
-            end
-        end)
-    end
-    WaitFirst()
-end
-
-local function StopPolling()
-    if not pollActive then return end
-    pollActive = false
-    -- pollRunning clears itself in PollTick when it sees pollActive = false
-end
-
--- ============================================================
--- CHAR SCREEN HOOKS
--- OnWindowOpened  — screen opens fresh
--- Select Feat     — feat selected in add-feat list (popup opens)
--- Close Feat Popup — popup closes, list needs redraw
---                    We apply BOTH list and popup here with a
---                    longer defer to win the race vs vanilla redraw
--- ============================================================
-local CharScreenHooked = false
-NotifyOnNewObject("/Game/Gui/Screens/GuiCharScreen.GuiCharScreen_C", function()
-    if CharScreenHooked then return end
-    CharScreenHooked = true
-
-    local hooks = {
-        { "OnWindowOpened", function() StartPolling() end },
-        { "OnWindowClosed", function() StopPolling() end },
-    }
-
-    for _, h in ipairs(hooks) do
-        local name, fn = h[1], h[2]
-        local ok, err = pcall(function()
-            RegisterHook("/Game/Gui/Screens/GuiCharScreen.GuiCharScreen_C:" .. name, fn)
-        end)
-        Log(ok and "Hook registered: GuiCharScreen:" .. name
-            or "Hook FAILED: GuiCharScreen:" .. name .. " | " .. tostring(err))
-    end
 end)
 
--- ============================================================
--- CHAR CREATION HOOKS
--- Init            — screen first opens
--- SetCharInfo     — char data refreshes (stat changes etc)
--- On Feat Clicked — feat selected, popup shown
--- On Feat State Changed — feat learned/removed
--- ============================================================
-local CharCreationHooked = false
-NotifyOnNewObject("/Game/Gui/Screens/GuiCharCreation.GuiCharCreation_C", function()
-    if CharCreationHooked then return end
-    CharCreationHooked = true
-
-    local hooks = {
-        { "Init",                  function() StartPolling() end },
-        { "SetCharInfo",           function() DeferredFull() end },
-        { "On Feat Clicked",       function() DeferredFull() end },
-        { "On Feat State Changed", function() DeferredFull() end },
-        { "OnWindowClosed",        function() StopPolling() end },
-    }
-
-    for _, h in ipairs(hooks) do
-        local name, fn = h[1], h[2]
-        local ok, err = pcall(function()
-            RegisterHook("/Game/Gui/Screens/GuiCharCreation.GuiCharCreation_C:" .. name, fn)
-        end)
-        Log(ok and "Hook registered: GuiCharCreation:" .. name
-            or "Hook FAILED: GuiCharCreation:" .. name .. " | " .. tostring(err))
-    end
+-- ------------------------------------------------------------------------
+-- F8 manual re-trigger (useful after loading a save mid-session)
+-- ------------------------------------------------------------------------
+RegisterKeyBind(Key.F8, function()
+    descriptions = nil
+    ExecuteInGameThread(function()
+        local ok = RunMod()
+        print("[FeatRebalance] F8 re-apply: " .. (ok and "OK" or "FAILED — check log"))
+    end)
 end)
 
-print("[Perks Rebalance] All hooks, descriptions, and commands registered.\n")
+Log("[INFO] Mod loaded. Waiting for InitGameState. Press F8 to manually re-apply.")
