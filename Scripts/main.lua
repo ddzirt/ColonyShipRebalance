@@ -318,7 +318,8 @@ HookFeat("/Game/Gameplay/Feats/F_Berserker.F_Berserker_C",
     "Get Conditional Effects",
     function(self, OwnerCharacter, Effects, IsValid)
         local ref = GetEffects(Effects)
-        if not ref or not IsConditionMet(IsValid) then return end
+        -- it should not rely on IsConditionMet since it would nope out
+        -- if not ref or not IsConditionMet(IsValid) then return end
 
         local char = GetChar(OwnerCharacter)
         if not char then return end
@@ -415,7 +416,8 @@ HookFeat("/Game/Gameplay/Feats/F_H_Juggernaut.F_H_Juggernaut_C",
     "Get Conditional Effects",
     function(self, OwnerCharacter, Effects, IsValid)
         local ref = GetEffects(Effects)
-        if not ref or not IsConditionMet(IsValid) then return end
+        -- it should not rely on IsConditionMet since it would nope out
+        -- if not ref or not IsConditionMet(IsValid) then return end
 
         local char = GetChar(OwnerCharacter)
         if not char then return end
@@ -484,6 +486,39 @@ HookFeat("/Game/Gameplay/Feats/F_HeavyHitter.F_HeavyHitter_C",
 )
 
 -- ------------------------------------------------------------------------
+-- Educated
+-- Addition: EDUCATED_INT_MIN, limiting feat availability
+-- ------------------------------------------------------------------------
+HookFeat("/Game/Gameplay/Feats/F_Educated.F_Educated_C",
+    "Is Available To Learn",
+    function(self, OwnerCharacter, Effects, IsValid)
+        local ref = GetEffects(Effects)
+        if not ref then return end
+
+        local char = GetChar(OwnerCharacter)
+        if not char then return end
+
+        local meetsReq = true
+        if char then
+            for _, name in ipairs({ "Intelligence", "Int", "INTEL" }) do
+                local iOk, iv = pcall(function() return char:GetPropertyValue(name) end)
+                if iOk and iv and type(iv) == "number" then
+                    meetsReq = iv >= cfg.EDUCATED_INT_MIN
+                    break
+                end
+            end
+        end
+        if meetsReq then
+            Log("[INFO] Educated: Intelligence >=" .. cfg.EDUCATED_INT_MIN .. ", applied")
+            return true
+        else
+            Log("[INFO] Educated: Intelligence <" .. cfg.EDUCATED_INT_MIN .. ", suppressed")
+            return false
+        end
+    end
+)
+
+-- ------------------------------------------------------------------------
 -- FEATBASE HOOK
 -- Handles feats that use FeatBase's Get Conditional Effects without
 -- overriding it: Educated, Mastermind, Gifted, FastRunner, ToughBastard
@@ -534,6 +569,21 @@ NotifyOnNewObject("/Game/Gameplay/Feats/BaseTypes/FeatBase.FeatBase_C",
                         if not ref then return end
                         Set(ref, F.SkillXPGain, cfg.GIFTED_SKILL_SXP)
                         Log("[INFO] Gifted: +" .. cfg.GIFTED_SKILL_SXP .. "% SkillXP applied")
+
+                        local char = GetChar(OwnerCharacter)
+                        if char then
+                            for _, propName in ipairs({ "UnspentStatPoints" }) do
+                                local pOk, val = pcall(function() return char:GetPropertyValue(propName) end)
+                                if pOk and type(val) == "number" then
+                                    local sOk = pcall(function() char:SetPropertyValue(propName, val + 1) end)
+                                    if sOk then
+                                        Log("[INFO] Gifted: +1 stat point (now " .. (val + 1) .. ")")
+                                        return
+                                    end
+                                end
+                            end
+                        end
+                        Log("[WARN] Gifted: could not find stat point property")
 
                         -- FAST RUNNER
                     elseif className:find("F_H_FastRunner_C") then
@@ -615,37 +665,71 @@ NotifyOnNewObject("/Game/Gameplay/Feats/BaseTypes/F_RegenBase.F_RegenBase_C",
 )
 
 -- ------------------------------------------------------------------------
+-- FAST RUNNER
+-- Vanilla: "+6 AP to movement,Initiative +24, disables enemy Reaction, Evasion skill gain +100%"
+-- Rebalanced: +FR_EVASION Evasion
+-- ------------------------------------------------------------------------
+-- NotifyOnNewObject("/Game/Gameplay/Feats/F_H_FastRunner.F_H_FastRunner_C", function()
+--     if FastRunnerHooked then return end
+--     FastRunnerHooked = true
+
+--     local ok, err = pcall(function()
+--         RegisterHook(
+--             "/Game/Gameplay/Feats/F_H_FastRunner.F_H_FastRunner_C:On Feat Added",
+--             function(self, OwnerCharacter, Effects, IsValid)
+--                 local className = GetFeatClassName(self)
+--                 if not className:find("F_H_FastRunner_C") then return end
+
+--                 local ref = GetEffects(Effects)
+--                 if not ref then return end
+
+--                 local char = GetChar(OwnerCharacter)
+--                 if not char then return end
+
+--                 Set(ref, F.Evasion, cfg.FR_EVASION)
+--                 Log("[INFO] FastRunner: Evasion +" .. cfg.FR_EVASION .. ".")
+--             end
+--         )
+--     end)
+--     if ok then
+--         Log("[INFO] Hook registered: FastRunner OnFeatAdded")
+--     else
+--         Log("[WARN] Hook FAILED: FastRunner OnFeatAdded | " .. tostring(err))
+--     end
+-- end)
+
+-- ------------------------------------------------------------------------
 -- GIFTED — OnFeatAdded: grant +1 additional stat point at feat acquisition
 -- ------------------------------------------------------------------------
-NotifyOnNewObject("/Game/Gameplay/Feats/F_Gifted.F_Gifted_C", function()
-    if GiftedAddedHooked then return end
-    GiftedAddedHooked = true
+-- NotifyOnNewObject("/Game/Gameplay/Feats/F_Gifted.F_Gifted_C", function()
+--     if GiftedAddedHooked then return end
+--     GiftedAddedHooked = true
 
-    local ok, err = pcall(function()
-        RegisterHook("/Game/Gameplay/Feats/F_Gifted.F_Gifted_C:On Feat Added",
-            function(self, OwnerCharacter)
-                local char = GetChar(OwnerCharacter)
-                if not char then return end
-                for _, propName in ipairs({ "StatPoints", "StatPointsRemaining", "FreeStatPoints" }) do
-                    local pOk, val = pcall(function() return char:GetPropertyValue(propName) end)
-                    if pOk and type(val) == "number" then
-                        local sOk = pcall(function() char:SetPropertyValue(propName, val + 1) end)
-                        if sOk then
-                            Log("[INFO] Gifted: +1 stat point (now " .. (val + 1) .. ")")
-                            return
-                        end
-                    end
-                end
-                Log("[WARN] Gifted: could not find stat point property")
-            end
-        )
-    end)
-    if ok then
-        Log("[INFO] Hook registered: Gifted OnFeatAdded")
-    else
-        Log("[WARN] Hook FAILED: Gifted OnFeatAdded | " .. tostring(err))
-    end
-end)
+--     local ok, err = pcall(function()
+--         RegisterHook("/Game/Gameplay/Feats/F_Gifted.F_Gifted_C:On Feat Added",
+--             function(self, OwnerCharacter)
+--                 local char = GetChar(OwnerCharacter)
+--                 if not char then return end
+--                 for _, propName in ipairs({ "UnspentStatPoints" }) do
+--                     local pOk, val = pcall(function() return char:GetPropertyValue(propName) end)
+--                     if pOk and type(val) == "number" then
+--                         local sOk = pcall(function() char:SetPropertyValue(propName, val + 1) end)
+--                         if sOk then
+--                             Log("[INFO] Gifted: +1 stat point (now " .. (val + 1) .. ")")
+--                             return
+--                         end
+--                     end
+--                 end
+--                 Log("[WARN] Gifted: could not find stat point property")
+--             end
+--         )
+--     end)
+--     if ok then
+--         Log("[INFO] Hook registered: Gifted OnFeatAdded")
+--     else
+--         Log("[WARN] Hook FAILED: Gifted OnFeatAdded | " .. tostring(err))
+--     end
+-- end)
 
 -- ------------------------------------------------------------------------
 -- Description patching via StaticFindObject on CDOs
