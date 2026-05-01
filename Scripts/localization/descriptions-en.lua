@@ -51,7 +51,7 @@ return function(cfg)
 
         ["/Game/Gameplay/Feats/F_H_HealingFactor.F_H_HealingFactor_C"] =
             "CON +2, Regeneration +3, Stat Healing +1, Max Implants +2, Biotech skill gain +100%, " ..
-            "Regeneration increases per level = level / " ..
+            "Regeneration increased: level / " ..
             cfg("HF_REGEN_PER_LEVELS", 3) .. ".",
 
         ["/Game/Gameplay/Feats/F_H_FastRunner.F_H_FastRunner_C"] =
