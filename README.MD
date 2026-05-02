@@ -95,6 +95,10 @@ Most changes are exposed in config.ini and can be tuned.
 * We'll see if I can remove feat from selection list instead.
 * Or split DR and HP bonus to this condition.
 
+### Bionic
+
+* Now grants +2 Implants
+
 ### Educated
 
 * Now grants +5% Skill XP gain, but only if `Intelligence` ≥ 6.
@@ -105,6 +109,7 @@ Most changes are exposed in config.ini and can be tuned.
 
 ### Gifted (Heroic)
 
+* Grants +4 to stats(+1 to original)
 * Additionally grants +5% Skill XP gain.
 
 ### Healing Factor (Heroic)
