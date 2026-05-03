@@ -44,32 +44,25 @@ Most changes are exposed in config.ini and can be tuned.
 * `Initiative` increased from +16 to +20.
 * Added +4 `Armor Handling`.
 
-### Warrior(Works partially)
+### Warrior(Works)
 
 * Additionally grants `Armor Handling` equal to (Melee Skill Level × 1), defaulting to +1 per level.
 
-### Berserker(Untested)
+### Berserker(Does not work)
 
 * `HP` above 50%: no bonus.
 * `HP` ≤ 50%: +1 min and max melee damage.
 * `HP` ≤ 25%: +2 min and max melee damage.
 * At 13 HP or below, the vanilla +2 bonus applies (no additional mod bonus). Might add +1 here.
 
-### Juggernaut (Heroic)(Untested)
-
-* `HP` above 50%: +1 Natural DR.
-* `HP` ≤ 50%: +2 Natural DR.
-* `HP` ≤ 25%: +3 Natural DR.
-* At 13 HP or below, vanilla handles its own +4 DR (no extra).
-
-### Basher (blunt weapons)(Untested)
+### Basher (blunt weapons)(Works but needs testings)
 
 * Removed vanilla penetration bonus.
 * Added +8% Melee `THC`.
 * Added +20% `Knockdown Critical Chance`.
 * Added +2% `Aimed THC` per Melee Skill Level.
 
-### Butcher (bladed weapons)(Untested)
+### Butcher (bladed weapons)(Works but needs testings)
 
 * Removed vanilla aimed attack bonus.
 * Added +8% Melee `THC`.
@@ -80,11 +73,11 @@ Most changes are exposed in config.ini and can be tuned.
 
 * Additionally grants +6 `Evasion`.
 
-### Gladiator(Untested)
+### Gladiator(Works but needs testings)
 
 * Now provides a flat +1 min and +1 max melee damage.
 
-### Heavy Hitter(Untested)
+### Heavy Hitter(Works but needs testings)
 
 * Additionally grants +1% `Critical Strike Chance` per 3 points of `Perception`.
 
@@ -110,9 +103,16 @@ Most changes are exposed in config.ini and can be tuned.
 * Grants +4 to stats(+1 to original)
 * Additionally grants +5% Skill XP gain.
 
-### Healing Factor (Heroic)(Untested)
+### Healing Factor (Heroic)(Does not work)
 
 * HP regeneration per turn is now `floor(character level / 3)` (default; configurable).
+
+### Juggernaut (Heroic)(Does not work)
+
+* `HP` above 50%: +1 Natural DR.
+* `HP` ≤ 50%: +2 Natural DR.
+* `HP` ≤ 25%: +3 Natural DR.
+* At 13 HP or below, vanilla handles its own +4 DR (no extra).
 
 ## License
 
