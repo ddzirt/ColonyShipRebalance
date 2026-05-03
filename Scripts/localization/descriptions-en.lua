@@ -38,7 +38,7 @@ return function(cfg)
         ["/Game/Gameplay/Feats/F_Educated.F_Educated_C"] =
             "+1 Tagged Skill, +25% Extra Experience. " ..
             " +" .. cfg("EDUCATED_SXP_BONUS", 5) .. "% Skill XP gain." ..
-            ":req INT >= " .. cfg("EDUCATED_INT_MIN", 6)
+            ":req REQ INT " .. cfg("EDUCATED_INT_MIN", 6)
         ,
 
         ["/Game/Gameplay/Feats/F_H_Mastermind.F_H_Mastermind_C"] =
@@ -70,7 +70,7 @@ return function(cfg)
 
         ["/Game/Gameplay/Feats/F_ToughBastard.F_ToughBastard_C"] =
             "HP +10, enemy's critical damage is halved. " ..
-            ":req CON >= " .. cfg("TB_CON", 6),
+            ":req REQ CON " .. cfg("TB_CON", 6),
 
         ["/Game/Gameplay/Feats/F_Bionic.F_Bionic_C"] =
             "Max Implants +" .. cfg("BIONIC_IMPLANTS", 1) .. ".",

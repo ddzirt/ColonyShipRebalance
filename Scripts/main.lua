@@ -768,17 +768,24 @@ local function PatchCDOs(descriptions)
             local cdoPath = packagePath .. ".Default__" .. className
             local cdo = StaticFindObject(cdoPath)
             if cdo and cdo:IsValid() then
-                local descText = descriptions[classPath]
-                if descText then
-                    cdo:SetPropertyValue("Description", FText(descText))
+                local fullText = descriptions[classPath]
+                if fullText then
+                    local descPart, reqPart = fullText:match("^(.-)%s*:req%s*(.+)$")
+                    if not descPart then
+                        descPart = fullText
+                    end
+                    -- always set description
+                    cdo:SetPropertyValue("Description", FText(trim(descPart)))
                     Log("[INFO] Description patched: " .. cdoPath)
+                    if reqPart then
+                        Log("[INFO] Requirement patched: " .. cdoPath)
+                        cdo:SetPropertyValue("Requirement", FText(trim(reqPart)))
+                    end
+                    updated = updated + 1
+                else
+                    -- key missing, skip or fail
+                    failed = failed + 1
                 end
-                local reqText = descriptions[classPath .. ":req"]
-                if reqText then
-                    cdo:SetPropertyValue("Requirement", FText(reqText))
-                    Log("[INFO] Requirement patched: " .. cdoPath)
-                end
-                updated = updated + 1
             else
                 Log("[WARN] CDO not found: " .. cdoPath)
                 failed = failed + 1
