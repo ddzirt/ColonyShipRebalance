@@ -96,7 +96,7 @@ Most changes are exposed in config.ini and can be tuned.
 
 * Now grants +2 Implants
 
-### Educated
+### Educated(Works)
 
 * Now grants +5% Skill XP gain
 * Requires `Intelligence` ≥ 6 to be available.
