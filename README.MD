@@ -38,76 +38,79 @@ If you are using a custom mod location or need to verify loading:
 
 Most changes are exposed in config.ini and can be tuned.
 
-### Lone Wolf
+### Lone Wolf(Works)
 
 * `Evasion` increased from +12 to +16.
 * `Initiative` increased from +16 to +20.
 * Added +4 `Armor Handling`.
 
-### Warrior
+### Warrior(Works partially)
 
 * Additionally grants `Armor Handling` equal to (Melee Skill Level × 1), defaulting to +1 per level.
 
-### Berserker
+### Berserker(Untested)
 
 * `HP` above 50%: no bonus.
 * `HP` ≤ 50%: +1 min and max melee damage.
 * `HP` ≤ 25%: +2 min and max melee damage.
 * At 13 HP or below, the vanilla +2 bonus applies (no additional mod bonus). Might add +1 here.
 
-### Juggernaut (Heroic)
+### Juggernaut (Heroic)(Untested)
 
 * `HP` above 50%: +1 Natural DR.
 * `HP` ≤ 50%: +2 Natural DR.
 * `HP` ≤ 25%: +3 Natural DR.
 * At 13 HP or below, vanilla handles its own +4 DR (no extra).
 
-### Basher (blunt weapons)
+### Basher (blunt weapons)(Untested)
 
 * Removed vanilla penetration bonus.
 * Added +8% Melee `THC`.
 * Added +20% `Knockdown Critical Chance`.
 * Added +2% `Aimed THC` per Melee Skill Level.
 
-### Butcher (bladed weapons)
+### Butcher (bladed weapons)(Untested)
 
 * Removed vanilla aimed attack bonus.
 * Added +8% Melee `THC`.
 * Added +20% `Carve Critical Chance`.
 * Added +2% `Penetration` per Melee Skill Level.
 
-### Fast Runner
+### Fast Runner(Works)
 
 * Additionally grants +6 `Evasion`.
 
-### Gladiator
+### Gladiator(Untested)
 
 * Now provides a flat +1 min and +1 max melee damage.
 
-### Heavy Hitter
+### Heavy Hitter(Untested)
 
 * Additionally grants +1% `Critical Strike Chance` per 3 points of `Perception`.
 
-### Tough Bastard
+### Tough Bastard(Works)
 
-* Requires `Constitution` ≥ 6 to gain any bonuses.
-* If CON < 6, all benefits (DR, HP bonus) are suppressed.
-* We'll see if I can remove feat from selection list instead.
-* Or split DR and HP bonus to this condition.
+* Requires `Constitution` ≥ 6 to be available.
+
+### Bionic(Does not work)
+
+* Now grants +2 Implants
 
 ### Educated
 
-* Now grants +5% Skill XP gain, but only if `Intelligence` ≥ 6.
+* Now grants +5% Skill XP gain
+* Requires `Intelligence` ≥ 6 to be available.
 
-### Mastermind (Heroic)
-
-* Additionally grants +5% Skill XP gain.
-
-### Gifted (Heroic)
+### Mastermind (Heroic)(Works)
 
 * Additionally grants +5% Skill XP gain.
 
-### Healing Factor (Heroic)
+### Gifted (Heroic)(Works partically, +1 to stats is yet to work)
+
+* Grants +4 to stats(+1 to original)
+* Additionally grants +5% Skill XP gain.
+
+### Healing Factor (Heroic)(Untested)
 
 * HP regeneration per turn is now `floor(character level / 3)` (default; configurable).
 
