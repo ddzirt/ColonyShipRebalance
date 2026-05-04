@@ -31,7 +31,7 @@ return function(cfg)
             cfg("BUTCHER_PEN_PER_LEVEL", 2) .. "% penetration per Melee skill level.",
 
         ["/Game/Gameplay/Feats/F_H_Juggernaut.F_H_Juggernaut_C"] =
-            "Knockdowns become Stuns, melee damage +2, Armor skill gain +100%,  +1 Natural DR. HP <= " ..
+            "Knockdowns are Stuns, melee damage +2, Armor skill gain +100%,  +1 DR. HP <= " ..
             math.floor(cfg("JUGG_MID_HP_PCT", 0.50) * 100) .. "%: +2 DR. HP <= " ..
             math.floor(cfg("JUGG_LOW_HP_PCT", 0.25) * 100) .. "%: +3 DR. HP <=13: +4 DR.",
 
