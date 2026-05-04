@@ -38,6 +38,12 @@ If you are using a custom mod location or need to verify loading:
 
 Most changes are exposed in config.ini and can be tuned.
 
+### Current Status:
+
+- Certain feats are not fully working(ones with custom HP logic)
+- Increasing implant count does not work
+- Healing Factor and increasing regeneration does not work
+
 ### Lone Wolf(Works)
 
 * `Evasion` increased from +12 to +16.
@@ -48,7 +54,7 @@ Most changes are exposed in config.ini and can be tuned.
 
 * Additionally grants `Armor Handling` equal to (Melee Skill Level × 1), defaulting to +1 per level.
 
-### Berserker(Does not work)
+### Berserker(Works partially)
 
 * `HP` above 50%: no bonus.
 * `HP` ≤ 50%: +1 min and max melee damage.
@@ -73,7 +79,7 @@ Most changes are exposed in config.ini and can be tuned.
 
 * Additionally grants +6 `Evasion`.
 
-### Gladiator(Works but needs testings)
+### Gladiator(Works)
 
 * Now provides a flat +1 min and +1 max melee damage.
 
@@ -107,7 +113,7 @@ Most changes are exposed in config.ini and can be tuned.
 
 * HP regeneration per turn is now `floor(character level / 3)` (default; configurable).
 
-### Juggernaut (Heroic)(Does not work)
+### Juggernaut (Heroic)(Works partially)
 
 * `HP` above 50%: +1 Natural DR.
 * `HP` ≤ 50%: +2 Natural DR.
