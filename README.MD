@@ -41,8 +41,7 @@ Most changes are exposed in config.ini and can be tuned.
 ### Current Status:
 
 - Certain feats are not fully working(ones with custom HP logic)
-- Increasing implant count does not work
-- Healing Factor and increasing regeneration does not work
+- Healing Factor and increasing regeneration does not work yet
 
 ### Lone Wolf(Works)
 
@@ -52,23 +51,23 @@ Most changes are exposed in config.ini and can be tuned.
 
 ### Warrior(Works)
 
-* Additionally grants `Armor Handling` equal to (Melee Skill Level × 1), defaulting to +1 per level.
+* Additionally grants `Armor Handling` equal to (Melee Skill Level(blunt + bladed) × 1).
 
-### Berserker(Works partially)
+### Berserker(Works but needs testing)
 
-* `HP` above 50%: no bonus.
-* `HP` ≤ 50%: +1 min and max melee damage.
-* `HP` ≤ 25%: +2 min and max melee damage.
-* At 13 HP or below, the vanilla +2 bonus applies (no additional mod bonus). Might add +1 here.
+* `HP` above 60%: no bonus.
+* `HP` ≤ 60%: +1 min and max `melee damage`.
+* `HP` ≤ 30%: +2 min and max `melee damage`.
+* At 13 HP or below, +2 bonus(no additional mod bonus). Might add +1 here.
 
-### Basher (blunt weapons)(Works but needs testings)
+### Basher (blunt weapons)(Works but needs testing)
 
 * Removed vanilla penetration bonus.
 * Added +8% Melee `THC`.
 * Added +20% `Knockdown Critical Chance`.
 * Added +2% `Aimed THC` per Melee Skill Level.
 
-### Butcher (bladed weapons)(Works but needs testings)
+### Butcher (bladed weapons)(Works but needs testing)
 
 * Removed vanilla aimed attack bonus.
 * Added +8% Melee `THC`.
@@ -81,9 +80,9 @@ Most changes are exposed in config.ini and can be tuned.
 
 ### Gladiator(Works)
 
-* Now provides a flat +1 min and +1 max melee damage.
+* Now provides a flat +1 min and +1 max `melee damage`.
 
-### Heavy Hitter(Works but needs testings)
+### Heavy Hitter(Works but needs testing)
 
 * Additionally grants +1% `Critical Strike Chance` per 3 points of `Perception`.
 
@@ -91,34 +90,35 @@ Most changes are exposed in config.ini and can be tuned.
 
 * Requires `Constitution` ≥ 6 to be available.
 
-### Bionic(Does not work)
+### Bionic(Works)
 
-* Now grants +2 Implants
+* Now grants +2 `Implants`
+* Configurable via `BIONIC_IMPLANTS` but hard cap at 7(Game maximum)
 
 ### Educated(Works)
 
-* Now grants +5% Skill XP gain
+* Now grants +5% `Skill XP` gain
 * Requires `Intelligence` ≥ 6 to be available.
 
 ### Mastermind (Heroic)(Works)
 
-* Additionally grants +5% Skill XP gain.
+* Additionally grants +5% `Skill XP` gain.
 
 ### Gifted (Heroic)(Works partically, +1 to stats is yet to work)
 
 * Grants +4 to stats(+1 to original)
-* Additionally grants +5% Skill XP gain.
+* Additionally grants +5% `Skill XP` gain.
 
 ### Healing Factor (Heroic)(Does not work)
 
-* HP regeneration per turn is now `floor(character level / 3)` (default; configurable).
+* HP regeneration per turn is now `floor(character level / 3)`.
 
-### Juggernaut (Heroic)(Works partially)
+### Juggernaut (Heroic)(Works but needs testing)
 
-* `HP` above 50%: +1 Natural DR.
-* `HP` ≤ 50%: +2 Natural DR.
-* `HP` ≤ 25%: +3 Natural DR.
-* At 13 HP or below, vanilla handles its own +4 DR (no extra).
+* `HP` above 60%: +1 DR. (Natural)
+* `HP` ≤ 60%: +2 DR.
+* `HP` ≤ 30%: +3 DR.
+* At 13 HP or below, +4 DR.
 
 ## License
 

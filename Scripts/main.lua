@@ -34,7 +34,7 @@ end
 -- ------------------------------------------------------------------------
 -- Local variables and caching
 -- ------------------------------------------------------------------------
-local AppliedModifiers  = {}
+local AppliedModifiers  = {} -- redundant, maybe I'll find a way
 local FeatNameCache     = {}
 local FeatBaseHooked    = false
 local logFile           = nil
@@ -42,6 +42,7 @@ local logBufferEnabled  = true -- set false to flush after every write
 local descriptions      = nil
 local descriptionsCache = nil  -- Cache for loaded descriptions(probably not needed but we'll see) TODO: Review this
 local configLoaded      = false
+local BionicCharIDs     = {}   -- set of charIDs that have Bionic feat
 
 -- ------------------------------------------------------------------------
 -- LOGGIN FUNCTIONS
@@ -212,6 +213,7 @@ local FeatClasses   = {
     Butcher       = "/Game/Gameplay/Feats/F_Butcher.F_Butcher_C",
     Basher        = "/Game/Gameplay/Feats/F_Basher.F_Basher_C",
     Berserker     = "/Game/Gameplay/Feats/F_Berserker.F_Berserker_C",
+    Bionic        = "/Game/Gameplay/Feats/F_Bionic.F_Bionic_C",
     -- HEROIC
     Mastermind    = "/Game/Gameplay/Feats/F_H_Mastermind.F_H_Mastermind_C",
     Juggernaut    = "/Game/Gameplay/Feats/F_H_Juggernaut.F_H_Juggernaut_C",
@@ -397,9 +399,8 @@ local FeatBaseHandlers = {
     -- Addition: EDUCATED_SXP_BONUS
     -- STATUS: Works
     -- ------------------------------------------------------------------------
-    -- Remember to track by character ID, not just globally
     ["F_Educated_C"] = function(char, ref)
-        local id = FeatClasses.Educated
+        -- local id = FeatClasses.Educated
         -- AppliedModifiers[id] = AppliedModifiers[id] or {}
         -- local charId = tostring(char)
         -- if not AppliedModifiers[id][charId] then
@@ -407,45 +408,22 @@ local FeatBaseHandlers = {
         local int = char and GetAttribute(char, statMapping.INT) or 4
         if int >= cfg.EDUCATED_INT_MIN then
             Set(ref, F.SkillXPGain, cfg.EDUCATED_SXP_BONUS)
-            -- Log("[INFO] Educated: +" .. cfg.EDUCATED_SXP_BONUS .. "% SkillXP")
+            -- Log("[INFO] Educated: +" .. cfg.EDUCATED_SXP_BONUS .. "% SkillXP", true)
         end
         -- end
     end,
 
     -- ------------------------------------------------------------------------
-    -- BERSERKER
-    -- Vanilla: +2 MeleeDMG at <=13 HP
-    -- Rebalanced: tiered above vanilla threshold
-    --   >50% HP  : nothing extra
-    --   <=50% HP : +1 min/max
-    --   <=25% HP : +2 min/max
-    --   <=13 HP  : vanilla handles, we exit
-    -- IsConditionMet NOT used — vanilla IsValid is false above 13 HP.
-    -- STATUS: Does not work / untested, might be in wrong place still
+    -- Bionic
+    -- Addition: +BIONIC_IMPLANTS
+    -- STATUS: Works
+    -- Is used for caching characters it is applied to, do we even need it?
     -- ------------------------------------------------------------------------
-    ["F_Berserker_C"] = function(char, ref)
-        -- local id = FeatClasses.Berserker
-        -- AppliedModifiers[id] = AppliedModifiers[id] or {}
-        -- local charId = tostring(char)
-        -- if not AppliedModifiers[id][charId] then
-        --     AppliedModifiers[id][charId] = true
-
-        local curHP, _, ratio = GetHP(char)
-        if not curHP or curHP <= 0 then return end
-        if curHP <= 13 then return end
-
-        Log("[INFO] Berserker: curHP: " .. tostring(curHP), true)
-
-        if ratio <= cfg.BERSERK_LOW_HP_PCT then
-            Set(ref, F.MeleeMinDMG, 2)
-            Set(ref, F.MeleeMaxDMG, 2)
-            Log("[INFO] Berserker: tier 2 (" .. math.floor(ratio * 100) .. "%)", true)
-        elseif ratio <= cfg.BERSERK_MID_HP_PCT then
-            Set(ref, F.MeleeMinDMG, 1)
-            Set(ref, F.MeleeMaxDMG, 1)
-            Log("[INFO] Berserker: tier 1 (" .. math.floor(ratio * 100) .. "%)", true)
+    ["F_Bionic_C"] = function(char, ref)
+        local id = char:GetCharID()
+        if id == 1 then -- only for MC(extend to party members only)
+            BionicCharIDs[id] = true
         end
-        -- end
     end,
 
     -- HEROIC
@@ -461,7 +439,7 @@ local FeatBaseHandlers = {
         -- if not AppliedModifiers[id][charId] then
         --     AppliedModifiers[id][charId] = true
         Set(ref, F.SkillXPGain, cfg.MASTERMIND_SXP_BONUS)
-        -- Log("[INFO] Mastermind: +" .. cfg.MASTERMIND_SXP_BONUS .. "% SkillXP")
+        -- Log("[INFO] Mastermind: +" .. cfg.MASTERMIND_SXP_BONUS .. "% SkillXP", true)
         -- end
     end,
 
@@ -724,6 +702,61 @@ HookFeat(FeatClasses.HeavyHitter,
 )
 
 -- ------------------------------------------------------------------------
+-- BERSERKER
+-- Vanilla: +2 MeleeDMG at <=13 HP
+-- Rebalanced: tiered above vanilla threshold
+--   >50% HP  : nothing extra
+--   <=50% HP : +1 min/max
+--   <=25% HP : +2 min/max
+--   <=13 HP  : vanilla handles, we exit
+-- IsConditionMet NOT used — vanilla IsValid is false above 13 HP.
+-- STATUS: Works(but with inconsistent results)
+-- ------------------------------------------------------------------------
+HookFeat(FeatClasses.Berserker, "Get Conditional Effects",
+    function(self, OwnerCharacter, Effects, IsValid)
+        local ref = GetEffects(Effects)
+        if not ref then return end
+
+        local char = GetChar(OwnerCharacter)
+        if not char then return end
+        if not char:IsValid() then return end
+
+        local curHP, _, ratio = GetHP(char)
+        if not curHP or curHP <= 0 then return end
+        -- Log("[INFO] Berserker: curHP: " .. curHP, true)
+        -- let Vanilla handle this case
+        -- seems to kill the logic
+        -- or not but something is not right, math is wrong.
+        -- Actually lest just handle vanilla ourselves.
+        -- if curHP <= 13 then
+        --     Log("[INFO] Berserker: return to vanilla", true)
+        --     return
+        -- end
+
+        -- local id = FeatClasses.Berserker
+        -- AppliedModifiers[id] = AppliedModifiers[id] or {}
+        -- local charId = tostring(char)
+        -- if not AppliedModifiers[id][charId] then
+        --     AppliedModifiers[id][charId] = true
+
+        if curHP <= 13 then
+            Set(ref, F.MeleeMinDMG, 2)
+            Set(ref, F.MeleeMaxDMG, 2)
+            Log("[INFO] Berserker: tier 3", true)
+        elseif ratio <= cfg.BERSERK_LOW_HP_PCT then
+            Set(ref, F.MeleeMinDMG, 2)
+            Set(ref, F.MeleeMaxDMG, 2)
+            -- Log("[INFO] Berserker: tier 2 (" .. math.floor(ratio * 100) .. "%)", true)
+        elseif ratio <= cfg.BERSERK_MID_HP_PCT then
+            Set(ref, F.MeleeMinDMG, 1)
+            Set(ref, F.MeleeMaxDMG, 1)
+            -- Log("[INFO] Berserker: tier 1 (" .. math.floor(ratio * 100) .. "%)", true)
+        end
+        -- end
+    end
+)
+
+-- ------------------------------------------------------------------------
 -- JUGGERNAUT (Heroic)
 -- Vanilla: +1 DR always, +4 DR at <=13 HP
 -- Rebalanced: tiered above vanilla threshold
@@ -742,13 +775,18 @@ HookFeat(FeatClasses.Juggernaut, "Get Conditional Effects",
         local char = GetChar(OwnerCharacter)
         if not char then return end
         if not char:IsValid() then return end
+        -- local charID = char:GetCharID()
+        -- Log("[INFO] Juggernaut: charID: " .. tostring(charID), true)
 
         local curHP, _, ratio = GetHP(char)
         if not curHP or curHP <= 0 then return end
         -- let Vanilla handle this case
         -- seems to kill the logic
         -- or not but something is not right, math is wrong
-        if curHP <= 13 then return end
+        -- if curHP <= 13 then
+        --     -- Log("[INFO] Juggernaut: return to vanilla", true)
+        --     return
+        -- end
 
         -- Log("[INFO] Juggernaut: curHP: " .. tostring(curHP), true)
 
@@ -756,7 +794,10 @@ HookFeat(FeatClasses.Juggernaut, "Get Conditional Effects",
         -- params["Is Valid"] = true -- sus AF
 
         -- Log("[INFO] Juggernaut: curHP: " .. tostring(curHP), true)
-        if ratio <= cfg.JUGG_LOW_HP_PCT then
+        if curHP <= 13 then
+            Set(ref, F.NaturalDR, 4)
+            Log("[INFO] Juggernaut: tier 4", true)
+        elseif ratio <= cfg.JUGG_LOW_HP_PCT then
             Set(ref, F.NaturalDR, 3)
             Log("[INFO] Juggernaut: tier 3 (" .. math.floor(ratio * 100) .. "%)", true)
         elseif ratio <= cfg.JUGG_MID_HP_PCT then
@@ -829,9 +870,8 @@ HookFeat(FeatClasses.ToughBastard,
 -- ------------------------------------------------------------------------
 -- FEATBASE HOOK
 -- Calculation patching for multiple feats
--- STATUS: Works partially(tested for Educated, FastRunner, Gladiator)
--- STATUS: Does not work for HealingFactor
--- TODO: Test Mastermind, Gifted and combo of MM+Educated and Gifted+Educated
+-- STATUS: Works partially
+-- STATUS: Does not work for HealingFactor, needs another testing pass
 -- ------------------------------------------------------------------------
 NotifyOnNewObject(FeatClasses.FeatBase, function()
     if FeatBaseHooked then return end
@@ -854,14 +894,18 @@ NotifyOnNewObject(FeatClasses.FeatBase, function()
                 -- Memoization: Check if we already stripped this specific instance name
                 local baseName = FeatNameCache[featName]
                 if not baseName then
-                    -- Extract the core class name (e.g., "F_Educated_C" from "F_Educated_C_123")
-                    baseName = featName:match("(.-_C)") or featName
+                    -- 1. Strip the "Default__" prefix (if present)
+                    local strippedName = featName:gsub("^Default__", "")
+                    -- 2. Extract the core class name (e.g., "F_Educated_C" from "F_Educated_C_123")
+                    baseName = strippedName:match("(.-_C)") or strippedName
                     FeatNameCache[featName] = baseName
+                    -- Log("[INFO] handler strippedName: " .. strippedName, true)
                 end
 
                 -- Execute handler if it exists in the dispatch table
                 local handler = FeatBaseHandlers[baseName]
                 if handler then
+                    -- Log("[INFO] handler baseName: " .. baseName, true)
                     handler(char, ref)
                 end
             end
@@ -873,66 +917,61 @@ NotifyOnNewObject(FeatClasses.FeatBase, function()
     else
         Log("[WARN] Hook FAILED: FeatBase:Get Effects | " .. tostring(err), true)
     end
+
+    ok, err = pcall(function()
+        RegisterHook("/Game/Scripts/ItsBpLib.ItsBpLib_C:GetMaxImplants",
+            function(selfParam, characterParam, gatherParam, worldParam, resParam)
+                -- local characterActor = characterParam:get() -- AActor
+                local char = GetChar(characterParam)
+                if not char then return end
+                if not char:IsValid() then return end
+
+                if char and BionicCharIDs[char:GetCharID()] then
+                    local con = GetAttribute(char, statMapping.CON)
+                    local baseImplants = math.floor(con / 2) -- 1 slot per 2 CON
+                    local totalMax = 7
+                    local newVal = math.min(baseImplants + cfg.BIONIC_IMPLANTS, totalMax)
+
+                    resParam:set(newVal) -- update Tooltip but I don't think it works
+                    gatherParam:set(true)
+                end
+            end)
+    end)
+    if ok then
+        Log("[INFO] Hook registered: ItsBpLib_C:GetMaxImplants")
+    else
+        Log("[WARN] Hook FAILED: ItsBpLib_C:GetMaxImplants | " .. tostring(err))
+    end
 end)
 
--- Does not work at all
--- ok, err = pcall(function()
---     RegisterPreHook("/Game/Scripts/ItsBpLib.ItsBpLib_C:GetMaxImplants",
---         function(self, Character, GatherTooltipInfo) -- 1. Manually execute the original function logic
---             -- In a Blueprint Library, 'self' is the Class Default Object (CDO)
---             local results = self:GetMaxImplants(Character, GatherTooltipInfo)
 
---             -- 2. Modify the result in the clean Lua table
---             -- 'results' will contain 'res', 'Feat Bonus', and 'Stat Value'
---             if results and results.res then
---                 local originalMax = results.res
---                 Log("[INFO] GetMaxImplants, originalMax: " .. tostring(originalMax))
---                 results.res = originalMax + 2 -- Your rebalance value
-
---                 -- Optional: Log the change using your existing format
---                 Log(string.format("[INFO] GetMaxImplants Patched | %d -> %d", originalMax, results.res))
---             end
-
---             -- 3. Return the table to 'short-circuit' the engine call.
---             -- The game will use your modified table instead of running the original BP code.
---             return results
---             -- Log("[INFO] GetMaxImplants, mapping is failing entirely")
---         end)
--- end)
--- if ok then
---     Log("[INFO] Hook registered: ItsBpLib_C:GetMaxImplants")
--- else
---     Log("[WARN] Hook FAILED: ItsBpLib_C:GetMaxImplants | " .. tostring(err))
--- end
 
 -- ------------------------------------------------------------------------
--- Hooking GetMaxImplants
+-- Hooking On Feat Added
 -- Use the shortened class:function format to avoid path resolution errors
 -- STATUS: Unverified
 -- ------------------------------------------------------------------------
--- RegisterHook("/Game/Scripts/ItsBpLib.ItsBpLib_C:GetMaxImplants", function(self, params)
---     -- UE4SS usually maps the primary output to 'res' if named so in the dump.
---     -- If 'res' is nil, we check 'ReturnValue' as a fallback.
---     local res = params.res or params.ReturnValue
-
---     -- Parameters with spaces must be accessed via string keys
---     local featBonus = params["Feat Bonus"] or 0
---     local statValue = params["Stat Value"] or 0
-
---     -- Safety check to prevent the 'compare number with nil' error
---     if res == nil then
---         print("[UE4SS] GetMaxImplants: 'res' is nil. Dumping available keys:")
---         for key, _ in pairs(params) do
---             print("Found Key: " .. tostring(key))
---         end
---         return
+-- NotifyOnNewObject(FeatClasses.FeatBase, function()
+--     local ok, err = pcall(function()
+--         RegisterHook("/Game/Gameplay/Feats/BaseTypes/FeatBase.FeatBase_C:On Feat Added",
+--             function(self, Owner)
+--                 -- self is the feat instance
+--                 local featName = self:get():GetFName():ToString()
+--                 if featName:find("Bionic") then
+--                     local char = GetChar(Owner)
+--                     if char and char:IsValid() then
+--                         local id = char:GetCharID()
+--                         BionicCharIDs[id] = true
+--                         Log("[INFO] Bionic detected via On Feat Added for char " .. id, true)
+--                     end
+--                 end
+--             end)
+--     end)
+--     if ok then
+--         Log("[INFO] Hook registered: FeatBase_C:On Feat Added")
+--     else
+--         Log("[WARN] Hook FAILED: FeatBase_C:On Feat Added | " .. tostring(err))
 --     end
-
---     -- Perform your logic (example: +1 to max implants)
---     -- Note: Writing back to the params object updates the game value
---     params.res = res + 1
-
---     print(string.format("[UE4SS] GetMaxImplants Modified | Old: %d | New: %d", res, params.res))
 -- end)
 
 -- ------------------------------------------------------------------------
@@ -1001,7 +1040,7 @@ local function RunMod()
         descriptions = loadDescriptions()
     end
     if not descriptions or next(descriptions) == nil then
-        Log("[ERROR] No descriptions loaded")
+        Log("[ERROR] No descriptions loaded", true)
         return false
     end
     return PatchCDOs(descriptions)
@@ -1014,7 +1053,7 @@ RegisterInitGameStatePostHook(function()
     -- this at times causes hang and freeze(especially when exiting the game)
     -- cause by other stuff invoked by mod, at least I think so(because
     -- fixing GetHP fixed this, for one of the issues)
-    Log("[INFO] InitGameState — patching CDO text properties", true)
+    -- Log("[INFO] InitGameState - patching CDO text properties", true)
     ExecuteInGameThread(function()
         local ok = RunMod()
         if not ok then
