@@ -40,20 +40,21 @@ Most changes are exposed in config.ini and can be tuned.
 
 ### Current Status:
 
-- Certain feats are not fully working(ones with custom HP logic)
-- Healing Factor and increasing regeneration does not work yet
+- Certain feats: Bionic, Gifted are not fully doing what I want them to do
 
-### Lone Wolf(Works)
+### Changes to feats:
+
+### Lone Wolf
 
 * `Evasion` increased from +12 to +16.
 * `Initiative` increased from +16 to +20.
 * Added +4 `Armor Handling`.
 
-### Warrior(Works)
+### Warrior
 
 * Additionally grants `Armor Handling` equal to (Melee Skill Level(blunt + bladed) × 1).
 
-### Berserker(Works)
+### Berserker
 
 * `HP` above 60%: no bonus.
 * `HP` ≤ 60%: +1 min and max `melee damage`.
@@ -74,11 +75,11 @@ Most changes are exposed in config.ini and can be tuned.
 * Added +20% `Carve Critical Chance`.
 * Added +2% `Penetration` per Melee Skill Level.
 
-### Fast Runner(Works)
+### Fast Runner
 
 * Additionally grants +6 `Evasion`.
 
-### Gladiator(Works)
+### Gladiator
 
 * Now provides a flat +1 min and +1 max `melee damage`.
 
@@ -86,7 +87,7 @@ Most changes are exposed in config.ini and can be tuned.
 
 * Additionally grants +1% `Critical Strike Chance` per 3 points of `Perception`.
 
-### Tough Bastard(Works)
+### Tough Bastard
 
 * Requires `Constitution` ≥ 6 to be available.
 
@@ -95,12 +96,12 @@ Most changes are exposed in config.ini and can be tuned.
 * Now grants +2 `Implants`
 * Configurable via `BIONIC_IMPLANTS` but hard cap at 7(Game maximum)
 
-### Educated(Works)
+### Educated
 
 * Now grants +5% `Skill XP` gain
 * Requires `Intelligence` ≥ 6 to be available.
 
-### Mastermind (Heroic)(Works)
+### Mastermind (Heroic)
 
 * Additionally grants +5% `Skill XP` gain.
 
@@ -109,11 +110,11 @@ Most changes are exposed in config.ini and can be tuned.
 * Grants +4 to stats(+1 to original)
 * Additionally grants +5% `Skill XP` gain.
 
-### Healing Factor (Heroic)(Works)
+### Healing Factor (Heroic)
 
 * HP regeneration per turn is now `floor(character level / 3)`.
 
-### Juggernaut (Heroic)(Works)
+### Juggernaut (Heroic)
 
 * `HP` above 60%: +1 DR. (Natural)
 * `HP` ≤ 60%: +2 DR.
