@@ -944,36 +944,6 @@ NotifyOnNewObject(FeatClasses.FeatBase, function()
     end
 end)
 
-
-
--- ------------------------------------------------------------------------
--- Hooking On Feat Added
--- Use the shortened class:function format to avoid path resolution errors
--- STATUS: Unverified
--- ------------------------------------------------------------------------
--- NotifyOnNewObject(FeatClasses.FeatBase, function()
---     local ok, err = pcall(function()
---         RegisterHook("/Game/Gameplay/Feats/BaseTypes/FeatBase.FeatBase_C:On Feat Added",
---             function(self, Owner)
---                 -- self is the feat instance
---                 local featName = self:get():GetFName():ToString()
---                 if featName:find("Bionic") then
---                     local char = GetChar(Owner)
---                     if char and char:IsValid() then
---                         local id = char:GetCharID()
---                         BionicCharIDs[id] = true
---                         Log("[INFO] Bionic detected via On Feat Added for char " .. id, true)
---                     end
---                 end
---             end)
---     end)
---     if ok then
---         Log("[INFO] Hook registered: FeatBase_C:On Feat Added")
---     else
---         Log("[WARN] Hook FAILED: FeatBase_C:On Feat Added | " .. tostring(err))
---     end
--- end)
-
 -- ------------------------------------------------------------------------
 -- CDO text patching: Description + Requirement
 -- Status: Works
