@@ -421,7 +421,9 @@ local FeatBaseHandlers = {
     -- ------------------------------------------------------------------------
     ["F_Bionic_C"] = function(char, ref)
         local id = char:GetCharID()
-        if id == 1 then -- only for MC(extend to party members only)
+        -- only for MC(extend to party members only)
+        -- not working or working incorrectly
+        if id == 1 then
             BionicCharIDs[id] = true
         end
     end,
@@ -926,6 +928,9 @@ NotifyOnNewObject(FeatClasses.FeatBase, function()
                 if not char then return end
                 if not char:IsValid() then return end
 
+                -- not working or working incorrectly
+                -- passes for characters without Bionic feat
+                -- not always though. Needs thorough testing
                 if char and BionicCharIDs[char:GetCharID()] then
                     local con = GetAttribute(char, statMapping.CON)
                     local baseImplants = math.floor(con / 2) -- 1 slot per 2 CON
