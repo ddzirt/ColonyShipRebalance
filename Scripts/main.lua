@@ -428,7 +428,53 @@ local FeatBaseHandlers = {
         end
     end,
 
-    -- HEROIC
+    -- ------------------------------------------------------------------------
+    -- BERSERKER
+    -- Vanilla: +2 MeleeDMG at <=13 HP
+    -- Rebalanced: tiered vanilla threshold
+    --   >60% HP  : nothing extra
+    --   <=60% HP : +1 min/max
+    --   <=30% HP : +2 min/max
+    --   <=13 HP  : vanilla handles, we exit
+    -- STATUS: Works
+    -- ------------------------------------------------------------------------
+    ["F_Berserker_C"] = function(char, ref)
+        local curHP, _, ratio = GetHP(char)
+        if not curHP or curHP <= 0 then return end
+        -- Log("[INFO] Berserker: curHP: " .. curHP, true)
+        -- let Vanilla handle this case
+        -- seems to kill the logic
+        -- or not but something is not right, math is wrong.
+        -- Actually lest just handle vanilla ourselves.
+        -- if curHP <= 13 then
+        --     Log("[INFO] Berserker: return to vanilla", true)
+        --     return
+        -- end
+
+        -- local id = FeatClasses.Berserker
+        -- AppliedModifiers[id] = AppliedModifiers[id] or {}
+        -- local charId = tostring(char)
+        -- if not AppliedModifiers[id][charId] then
+        --     AppliedModifiers[id][charId] = true
+
+        if curHP <= 13 then
+            Set(ref, F.MeleeMinDMG, 2)
+            Set(ref, F.MeleeMaxDMG, 2)
+            Log("[INFO] Berserker: tier 3", true)
+        elseif ratio <= cfg.BERSERK_LOW_HP_PCT then
+            Set(ref, F.MeleeMinDMG, 2)
+            Set(ref, F.MeleeMaxDMG, 2)
+            Log("[INFO] Berserker: tier 2 (" .. math.floor(ratio * 100) .. "%)", true)
+        elseif ratio <= cfg.BERSERK_MID_HP_PCT then
+            Set(ref, F.MeleeMinDMG, 1)
+            Set(ref, F.MeleeMaxDMG, 1)
+            Log("[INFO] Berserker: tier 1 (" .. math.floor(ratio * 100) .. "%)", true)
+        end
+        -- end
+    end,
+
+    -- HEROIC SECTION ---------------------------------------------------------
+
     -- ------------------------------------------------------------------------
     -- Mastermind
     -- Addition: +MASTERMIND_SXP_BONUS
@@ -477,6 +523,11 @@ local FeatBaseHandlers = {
         -- end
     end,
 
+    -- ------------------------------------------------------------------------
+    -- Healing Factor
+    -- Addition: +HF_REGEN_PER_LEVELS
+    -- STATUS: Works
+    -- ------------------------------------------------------------------------
     ["F_H_HealingFactor_C"] = function(char, ref)
         -- local id = FeatClasses.HealingFactor
         -- AppliedModifiers[id] = AppliedModifiers[id] or {}
@@ -486,12 +537,51 @@ local FeatBaseHandlers = {
 
         local level = char and GetCharLevel(char) or 0
         local bonus = math.floor(level / cfg.HF_REGEN_PER_LEVELS)
-        Log("[INFO] HealingFactor: HP Bonus: " .. tostring(bonus), true)
+        local base = 3 -- default
+        -- Log("[INFO] HealingFactor: HP Bonus: " .. tostring(bonus), true)
         if bonus > 0 then
-            Set(ref, F.HPRegen, bonus)
-            Log("[INFO] HealingFactor: level=" .. level .. " +HPRegen=" .. bonus, true)
+            Set(ref, F.HPRegen, base + bonus)
+            -- Log("[INFO] HealingFactor: level=" .. level .. " +HPRegen=" .. bonus, true)
         end
         -- end
+    end,
+
+    -- ------------------------------------------------------------------------
+    -- JUGGERNAUT (Heroic)
+    -- Rebalanced: tiered vanilla threshold
+    --   >60% HP  : +1 DR
+    --   <=60% HP : +2 DR
+    --   <=30% HP : +3 DR
+    --   <=13 HP  : vanilla handles +4, we exit
+    -- STATUS: Works
+    -- ------------------------------------------------------------------------
+    ["F_H_Juggernaut_C"] = function(char, ref)
+        if not char then return end
+        if not char:IsValid() then return end
+
+        local curHP, _, ratio = GetHP(char)
+        if not curHP or curHP <= 0 then return end
+        -- letting Vanilla handle this case
+        -- seems to kill the logic
+        -- or not but something is not right, math is wrong
+        -- if curHP <= 13 then
+        --     -- Log("[INFO] Juggernaut: return to vanilla", true)
+        --     return
+        -- end
+
+        -- Log("[INFO] Juggernaut: curHP: " .. tostring(curHP), true)
+        if curHP <= 13 then
+            Set(ref, F.NaturalDR, 4)
+            -- Log("[INFO] Juggernaut: tier 4", true)
+        elseif ratio <= cfg.JUGG_LOW_HP_PCT then
+            Set(ref, F.NaturalDR, 3)
+            -- Log("[INFO] Juggernaut: tier 3 (" .. math.floor(ratio * 100) .. "%)", true)
+        elseif ratio <= cfg.JUGG_MID_HP_PCT then
+            Set(ref, F.NaturalDR, 2)
+            -- Log("[INFO] Juggernaut: tier 2 (" .. math.floor(ratio * 100) .. "%)", true)
+        else
+            Set(ref, F.NaturalDR, 1)
+        end
     end
 
     -- Add feats following the same pattern
@@ -704,117 +794,6 @@ HookFeat(FeatClasses.HeavyHitter,
 )
 
 -- ------------------------------------------------------------------------
--- BERSERKER
--- Vanilla: +2 MeleeDMG at <=13 HP
--- Rebalanced: tiered above vanilla threshold
---   >50% HP  : nothing extra
---   <=50% HP : +1 min/max
---   <=25% HP : +2 min/max
---   <=13 HP  : vanilla handles, we exit
--- IsConditionMet NOT used — vanilla IsValid is false above 13 HP.
--- STATUS: Works(but with inconsistent results)
--- ------------------------------------------------------------------------
-HookFeat(FeatClasses.Berserker, "Get Conditional Effects",
-    function(self, OwnerCharacter, Effects, IsValid)
-        local ref = GetEffects(Effects)
-        if not ref then return end
-
-        local char = GetChar(OwnerCharacter)
-        if not char then return end
-        if not char:IsValid() then return end
-
-        local curHP, _, ratio = GetHP(char)
-        if not curHP or curHP <= 0 then return end
-        -- Log("[INFO] Berserker: curHP: " .. curHP, true)
-        -- let Vanilla handle this case
-        -- seems to kill the logic
-        -- or not but something is not right, math is wrong.
-        -- Actually lest just handle vanilla ourselves.
-        -- if curHP <= 13 then
-        --     Log("[INFO] Berserker: return to vanilla", true)
-        --     return
-        -- end
-
-        -- local id = FeatClasses.Berserker
-        -- AppliedModifiers[id] = AppliedModifiers[id] or {}
-        -- local charId = tostring(char)
-        -- if not AppliedModifiers[id][charId] then
-        --     AppliedModifiers[id][charId] = true
-
-        if curHP <= 13 then
-            Set(ref, F.MeleeMinDMG, 2)
-            Set(ref, F.MeleeMaxDMG, 2)
-            Log("[INFO] Berserker: tier 3", true)
-        elseif ratio <= cfg.BERSERK_LOW_HP_PCT then
-            Set(ref, F.MeleeMinDMG, 2)
-            Set(ref, F.MeleeMaxDMG, 2)
-            -- Log("[INFO] Berserker: tier 2 (" .. math.floor(ratio * 100) .. "%)", true)
-        elseif ratio <= cfg.BERSERK_MID_HP_PCT then
-            Set(ref, F.MeleeMinDMG, 1)
-            Set(ref, F.MeleeMaxDMG, 1)
-            -- Log("[INFO] Berserker: tier 1 (" .. math.floor(ratio * 100) .. "%)", true)
-        end
-        -- end
-    end
-)
-
--- ------------------------------------------------------------------------
--- JUGGERNAUT (Heroic)
--- Vanilla: +1 DR always, +4 DR at <=13 HP
--- Rebalanced: tiered above vanilla threshold
---   >50% HP  : +1 DR
---   <=50% HP : +2 DR
---   <=25% HP : +3 DR
---   <=13 HP  : vanilla handles +4, we exit
--- IsConditionMet NOT used — same reason as Berserker.
--- STATUS: Works(but with inconsistent results)
--- ------------------------------------------------------------------------
-HookFeat(FeatClasses.Juggernaut, "Get Conditional Effects",
-    function(self, OwnerCharacter, Effects, IsValid)
-        local ref = GetEffects(Effects)
-        if not ref then return end
-
-        local char = GetChar(OwnerCharacter)
-        if not char then return end
-        if not char:IsValid() then return end
-        -- local charID = char:GetCharID()
-        -- Log("[INFO] Juggernaut: charID: " .. tostring(charID), true)
-
-        local curHP, _, ratio = GetHP(char)
-        if not curHP or curHP <= 0 then return end
-        -- let Vanilla handle this case
-        -- seems to kill the logic
-        -- or not but something is not right, math is wrong
-        -- if curHP <= 13 then
-        --     -- Log("[INFO] Juggernaut: return to vanilla", true)
-        --     return
-        -- end
-
-        -- Log("[INFO] Juggernaut: curHP: " .. tostring(curHP), true)
-
-        -- Force 'Is Valid' to true so the engine processes the struct
-        -- params["Is Valid"] = true -- sus AF
-
-        -- Log("[INFO] Juggernaut: curHP: " .. tostring(curHP), true)
-        if curHP <= 13 then
-            Set(ref, F.NaturalDR, 4)
-            Log("[INFO] Juggernaut: tier 4", true)
-        elseif ratio <= cfg.JUGG_LOW_HP_PCT then
-            Set(ref, F.NaturalDR, 3)
-            Log("[INFO] Juggernaut: tier 3 (" .. math.floor(ratio * 100) .. "%)", true)
-        elseif ratio <= cfg.JUGG_MID_HP_PCT then
-            Set(ref, F.NaturalDR, 2)
-            Log("[INFO] Juggernaut: tier 2 (" .. math.floor(ratio * 100) .. "%)", true)
-        else
-            Set(ref, F.NaturalDR, 1)
-        end
-
-        -- Return true to prevent the original Blueprint code from overwriting your changes
-        return true
-    end
-)
-
--- ------------------------------------------------------------------------
 -- EDUCATED — Is Available To Learn
 -- Gates feat selection on INT >= EDUCATED_INT_MIN.
 -- Signature (dump L82223): (OwnerCharacter) -> Yes (BoolProperty)
@@ -928,10 +907,12 @@ NotifyOnNewObject(FeatClasses.FeatBase, function()
                 if not char then return end
                 if not char:IsValid() then return end
 
+                local id = char:GetCharID()
                 -- not working or working incorrectly
                 -- passes for characters without Bionic feat
                 -- not always though. Needs thorough testing
-                if char and BionicCharIDs[char:GetCharID()] then
+                if char and BionicCharIDs[id] then
+                    Log("[INFO] GetMaxImplants id: " .. id, true)
                     local con = GetAttribute(char, statMapping.CON)
                     local baseImplants = math.floor(con / 2) -- 1 slot per 2 CON
                     local totalMax = 7
