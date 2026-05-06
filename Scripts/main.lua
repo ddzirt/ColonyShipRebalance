@@ -43,6 +43,119 @@ local descriptions      = nil
 local descriptionsCache = nil  -- Cache for loaded descriptions(probably not needed but we'll see) TODO: Review this
 local configLoaded      = false
 local BionicCharIDs     = {}   -- set of charIDs that have Bionic feat
+local reCalculationDone = false
+
+-- ------------------------------------------------------------------------
+-- Field constants (CsgCharEffects mangled property names)
+-- ------------------------------------------------------------------------
+local F                 = {
+    Evasion         = "EvasionMod_76_5A03A1C64111532DC77320909200AA8C",
+    Initiative      = "InitiativeMod_140_36D637CF4AF656392EE046A05B615F11",
+    MaxAP           = "MaxAPMod_83_04CD14B24ACBF706E9CC78BAB1296612",
+    ArmorPenalty    = "ArmorPenaltyMod_82_40D594EA4C29457956FCF582A15792C2",
+    MeleeTHC        = "MeleeTHCMod_68_E0C338BB45331F54E7D9F886B676B652",
+    MeleeCSC        = "MeleeCSCMod_69_894119434B15B7D76F8BC58A0C3B60DF",
+    MeleeMinDMG     = "MeleeMinDMGMod_92_94EA5AF74C9ED716E05B908931335051",
+    MeleeMaxDMG     = "MeleeMaxDMGMod_137_C4191C38408183538BE5049AB7D545E1",
+    NaturalDR       = "NaturalDRMod_105_0D15FF214A7CB826380DFFA3CBE5B518",
+    KnockdownChance = "KnockdownChanceMod_107_FDDD792C49AC81324BCA7BB7C8BE559A",
+    PenetrationPct  = "PenetrationPercentMod_111_1177A0254CB2DF505A72B8A6C9451C02",
+    AimedTHC        = "MarksmanshipAimedTHCMod_120_0434BD96457EA01836B0159A3D930E6C",
+    MaxHP           = "MaxHPMod_84_435ACAD04EFCD7C7108DE3AFCB43BD4D",
+    SkillXPGain     = "SkillXPGainMod_224_A0747CE04E2A3303C8681C9398E3577E",
+    CSC             = "CSCMod_16_167EDCF94FF53F08D293809DB72CAF5A",
+    HPRegen         = "HPRegenerationRateMod_57_F3F3ACE741EDD3E2CE40168C00C5D1D8",
+}
+
+-- ------------------------------------------------------------------------
+-- Feat class references for Has Feat checks
+-- ------------------------------------------------------------------------
+local FeatClasses       = {
+    FeatBase      = "/Game/Gameplay/Feats/BaseTypes/FeatBase.FeatBase_C",
+    -- USUAL
+    Educated      = "/Game/Gameplay/Feats/F_Educated.F_Educated_C",
+    ToughBastard  = "/Game/Gameplay/Feats/F_ToughBastard.F_ToughBastard_C",
+    LoneWolf      = "/Game/Gameplay/Feats/F_LoneWolf.F_LoneWolf_C",
+    Warrior       = "/Game/Gameplay/Feats/F_Warrior.F_Warrior_C",
+    Gladiator     = "/Game/Gameplay/Feats/F_Gladiator.F_Gladiator_C",
+    HeavyHitter   = "/Game/Gameplay/Feats/F_HeavyHitter.F_HeavyHitter_C",
+    Butcher       = "/Game/Gameplay/Feats/F_Butcher.F_Butcher_C",
+    Basher        = "/Game/Gameplay/Feats/F_Basher.F_Basher_C",
+    Berserker     = "/Game/Gameplay/Feats/F_Berserker.F_Berserker_C",
+    Bionic        = "/Game/Gameplay/Feats/F_Bionic.F_Bionic_C",
+    SkillMonkey   = "/Game/Gameplay/Feats/F_SkillMonkey_C",
+    MasterTrader  = "/Game/Gameplay/Feats/F_MasterTrader.F_MasterTrader_C",
+    -- HEROIC
+    Mastermind    = "/Game/Gameplay/Feats/F_H_Mastermind.F_H_Mastermind_C",
+    Juggernaut    = "/Game/Gameplay/Feats/F_H_Juggernaut.F_H_Juggernaut_C",
+    FastRunner    = "/Game/Gameplay/Feats/F_H_FastRunner.F_H_FastRunner_C",
+    HealingFactor = "/Game/Gameplay/Feats/F_H_HealingFactor.F_H_HealingFactor_C",
+    Gifted        = "/Game/Gameplay/Feats/F_Gifted.F_Gifted_C", -- the only heroic without H
+}
+
+-- ------------------------------------------------------------------------
+-- DEFAULTS or REVERSE ENGINEERED VALUES
+-- ------------------------------------------------------------------------
+local DEFAULTS          = {
+    LANGUAGE                = "en",
+    LW_EVASION              = 16,
+    LW_INITIATIVE           = 20,
+    LW_ARMOR_PENALTY        = 4,
+    WARRIOR_ARMOR_PER_LEVEL = 1,
+    BERSERK_MID_HP_PCT      = 0.50,
+    BERSERK_LOW_HP_PCT      = 0.25,
+    BASHER_THC              = 8,
+    BASHER_KNOCKDOWN        = 20,
+    BASHER_AIMED_PER_LEVEL  = 2,
+    BUTCHER_THC             = 8,
+    BUTCHER_CSC             = 20,
+    BUTCHER_PEN_PER_LEVEL   = 2,
+    JUGG_MID_HP_PCT         = 0.50,
+    JUGG_LOW_HP_PCT         = 0.25,
+    EDUCATED_SXP_BONUS      = 15,
+    EDUCATED_INT_MIN        = 6,
+    MASTERMIND_SXP_BONUS    = 15,
+    GIFTED_SKILL_SXP        = 15,
+    HF_REGEN_PER_LEVELS     = 3,
+    FR_EVASION              = 6,
+    GLADIATOR_MIN           = 1,
+    GLADIATOR_MAX           = 1,
+    HH_PER                  = 3,
+    HH_CRIT_PER_STEP        = 1,
+    TB_CON                  = 6,
+    BIONIC_IMPLANTS         = 2,
+    MASTER_TRADER_CHA       = 6,
+    DEBUG                   = false,
+}
+local cfg               = {}
+local statMapping       = {
+    STR = 0,
+    DEX = 1,
+    CON = 2,
+    PER = 3,
+    INT = 4,
+    CHA = 5,
+}
+local skillsMapping     = {
+    Bladed = 0,
+    Blunt = 1,
+    Pistol = 2,
+    Shotgun = 3,
+    Rifle = 4,
+    SMG = 5,
+    CriticalStrike = 8,
+    Evasion = 9,
+    Armor = 10,
+    Biotech = 11,
+    Computers = 12,
+    Electronics = 13,
+    Persuasion = 14,
+    Streetwise = 15,
+    Impersonate = 16,
+    Lockpick = 17,
+    Steal = 18,
+    Sneak = 19
+}
 
 -- ------------------------------------------------------------------------
 -- LOGGIN FUNCTIONS
@@ -60,18 +173,20 @@ local function InitLog()
 end
 
 local function Log(msg, useOnlyPrint)
+    if not cfg.DEBUG then return end
+
+    local onlyPrint = cfg.DEBUG_ONLY_CONSOLE or useOnlyPrint
     local fullMsg = "[Rebalance] " .. msg .. "\n"
     print(fullMsg)
-    if not useOnlyPrint then
-        if logFile then
-            local ok, err = pcall(logFile.write, logFile, fullMsg .. "\n")
+
+    if not onlyPrint then
+        local lf = logFile
+        if lf then
+            local ok, err = pcall(lf.write, lf, fullMsg .. "\n")
             if not ok then
                 print("[Rebalance] Log write error: " .. tostring(err))
-            else
-                -- Optional: flush immediately if performance is less critical than reliability
-                if not logBufferEnabled then
-                    logFile:flush()
-                end
+            elseif not logBufferEnabled then
+                lf:flush()
             end
         end
     end
@@ -176,116 +291,6 @@ local function trim(s)
 end
 
 -- ------------------------------------------------------------------------
--- Field constants (CsgCharEffects mangled property names)
--- ------------------------------------------------------------------------
-local F             = {
-    Evasion         = "EvasionMod_76_5A03A1C64111532DC77320909200AA8C",
-    Initiative      = "InitiativeMod_140_36D637CF4AF656392EE046A05B615F11",
-    MaxAP           = "MaxAPMod_83_04CD14B24ACBF706E9CC78BAB1296612",
-    ArmorPenalty    = "ArmorPenaltyMod_82_40D594EA4C29457956FCF582A15792C2",
-    MeleeTHC        = "MeleeTHCMod_68_E0C338BB45331F54E7D9F886B676B652",
-    MeleeCSC        = "MeleeCSCMod_69_894119434B15B7D76F8BC58A0C3B60DF",
-    MeleeMinDMG     = "MeleeMinDMGMod_92_94EA5AF74C9ED716E05B908931335051",
-    MeleeMaxDMG     = "MeleeMaxDMGMod_137_C4191C38408183538BE5049AB7D545E1",
-    NaturalDR       = "NaturalDRMod_105_0D15FF214A7CB826380DFFA3CBE5B518",
-    KnockdownChance = "KnockdownChanceMod_107_FDDD792C49AC81324BCA7BB7C8BE559A",
-    PenetrationPct  = "PenetrationPercentMod_111_1177A0254CB2DF505A72B8A6C9451C02",
-    AimedTHC        = "MarksmanshipAimedTHCMod_120_0434BD96457EA01836B0159A3D930E6C",
-    MaxHP           = "MaxHPMod_84_435ACAD04EFCD7C7108DE3AFCB43BD4D",
-    SkillXPGain     = "SkillXPGainMod_224_A0747CE04E2A3303C8681C9398E3577E",
-    CSC             = "CSCMod_16_167EDCF94FF53F08D293809DB72CAF5A",
-    HPRegen         = "HPRegenerationRateMod_57_F3F3ACE741EDD3E2CE40168C00C5D1D8",
-}
-
--- ------------------------------------------------------------------------
--- Feat class references for Has Feat checks
--- TODO: Move all classes here and use it in hooks
--- ------------------------------------------------------------------------
-local FeatClasses   = {
-    FeatBase      = "/Game/Gameplay/Feats/BaseTypes/FeatBase.FeatBase_C",
-    -- USUAL
-    Educated      = "/Game/Gameplay/Feats/F_Educated.F_Educated_C",
-    ToughBastard  = "/Game/Gameplay/Feats/F_ToughBastard.F_ToughBastard_C",
-    LoneWolf      = "/Game/Gameplay/Feats/F_LoneWolf.F_LoneWolf_C",
-    Warrior       = "/Game/Gameplay/Feats/F_Warrior.F_Warrior_C",
-    Gladiator     = "/Game/Gameplay/Feats/F_Gladiator.F_Gladiator_C",
-    HeavyHitter   = "/Game/Gameplay/Feats/F_HeavyHitter.F_HeavyHitter_C",
-    Butcher       = "/Game/Gameplay/Feats/F_Butcher.F_Butcher_C",
-    Basher        = "/Game/Gameplay/Feats/F_Basher.F_Basher_C",
-    Berserker     = "/Game/Gameplay/Feats/F_Berserker.F_Berserker_C",
-    Bionic        = "/Game/Gameplay/Feats/F_Bionic.F_Bionic_C",
-    -- HEROIC
-    Mastermind    = "/Game/Gameplay/Feats/F_H_Mastermind.F_H_Mastermind_C",
-    Juggernaut    = "/Game/Gameplay/Feats/F_H_Juggernaut.F_H_Juggernaut_C",
-    FastRunner    = "/Game/Gameplay/Feats/F_H_FastRunner.F_H_FastRunner_C",
-    HealingFactor = "/Game/Gameplay/Feats/F_H_HealingFactor.F_H_HealingFactor_C",
-    Gifted        = "/Game/Gameplay/Feats/F_Gifted.F_Gifted_C", -- the only heroic without H
-}
-
--- ------------------------------------------------------------------------
--- DEFAULTS or REVERSE ENGINEERED VALUES
--- ------------------------------------------------------------------------
-local DEFAULTS      = {
-    LANGUAGE                = "en",
-    LW_EVASION              = 16,
-    LW_INITIATIVE           = 20,
-    LW_ARMOR_PENALTY        = 4,
-    WARRIOR_ARMOR_PER_LEVEL = 1,
-    BERSERK_MID_HP_PCT      = 0.50,
-    BERSERK_LOW_HP_PCT      = 0.25,
-    BASHER_THC              = 8,
-    BASHER_KNOCKDOWN        = 20,
-    BASHER_AIMED_PER_LEVEL  = 2,
-    BUTCHER_THC             = 8,
-    BUTCHER_CSC             = 20,
-    BUTCHER_PEN_PER_LEVEL   = 2,
-    JUGG_MID_HP_PCT         = 0.50,
-    JUGG_LOW_HP_PCT         = 0.25,
-    EDUCATED_SXP_BONUS      = 5,
-    EDUCATED_INT_MIN        = 6,
-    MASTERMIND_SXP_BONUS    = 5,
-    GIFTED_SKILL_SXP        = 5,
-    HF_REGEN_PER_LEVELS     = 3,
-    FR_EVASION              = 6,
-    GLADIATOR_MIN           = 1,
-    GLADIATOR_MAX           = 1,
-    HH_PER                  = 3,
-    HH_CRIT_PER_STEP        = 1,
-    TB_CON                  = 6,
-    BIONIC_IMPLANTS         = 2,
-    DEBUG                   = false,
-}
-local cfg           = {}
-local statMapping   = {
-    STR = 0,
-    DEX = 1,
-    CON = 2,
-    PER = 3,
-    INT = 4,
-    CHA = 5,
-}
-local skillsMapping = {
-    Bladed = 0,
-    Blunt = 1,
-    Pistol = 2,
-    Shotgun = 3,
-    Rifle = 4,
-    SMG = 5,
-    CriticalStrike = 8,
-    Evasion = 9,
-    Armor = 10,
-    Biotech = 11,
-    Computers = 12,
-    Electronics = 13,
-    Persuasion = 14,
-    Streetwise = 15,
-    Impersonate = 16,
-    Lockpick = 17,
-    Steal = 18,
-    Sneak = 19
-}
-
--- ------------------------------------------------------------------------
 -- INI Parser
 -- ------------------------------------------------------------------------
 local function ParseIni(filePath)
@@ -369,6 +374,55 @@ local function loadDescriptions()
 
     descriptionsCache = descs or {}
     return descriptionsCache
+end
+
+-- ------------------------------------------------------------------------
+-- Force update of character effects/feats
+-- ------------------------------------------------------------------------
+local function ForcePartyRecalc(gi)
+    -- Get the game instance object
+    -- local GameInstance = FindFirstOf("ColonyShipGameInstanceBP_C")
+    -- if not GameInstance or not GameInstance:IsValid() then
+    --     Log("[WARN] ForcePartyRecalc: GameInstance not found or invalid", true)
+    --     return
+    -- end
+
+    -- local GI_CDO = GameInstance:GetClass():GetDefaultObject()
+    -- local chars = GI_CDO:GetPartyChars_Full()
+
+    -- Call the member function that returns the full party array
+    -- local chars = GameInstance:GetPartyChars_Full()
+    -- if not chars or not chars:IsValid() then
+    --     Log("[WARN] ForcePartyRecalc: GetPartyChars_Full returned nil or invalid", true)
+    --     return
+    -- end
+
+    Log("IsValid: " .. tostring(gi:IsValid()), true)
+    Log("HasFunction: " .. tostring(gi:GetClass():FindFunctionByName("GetPartyChars_Full") ~= nil), true)
+
+    -- local count = 0
+    -- for i = 1, chars:Num() do -- TArray iteration in UE4SS Lua
+    --     local char = chars:Get(i)
+    --     if char and char:IsValid() then
+    --         -- If the character crashed here, wrap in pcall
+    --         local ok, err = pcall(function()
+    --             char:CalcCharEffectsFeats(0, false)
+    --         end)
+    --         if ok then
+    --             count = count + 1
+    --         else
+    --             Log("[ERROR] ForcePartyRecalc: char failed: " .. tostring(err), true)
+    --         end
+    --     end
+    -- end
+    -- Log("[INFO] ForcePartyRecalc: recalculated " .. count .. " characters", true)
+end
+
+local function TryForcePartyRecalc(gi)
+    -- double‑check flag (the timer callback could theoretically fire after a map reload; the flag prevents it)
+    if reCalculationDone then return end
+    reCalculationDone = true
+    ForcePartyRecalc(gi)
 end
 
 -- ------------------------------------------------------------------------
@@ -849,6 +903,35 @@ HookFeat(FeatClasses.ToughBastard,
 )
 
 -- ------------------------------------------------------------------------
+-- MASTER TRADER — Is Available To Learn
+-- Gates feat selection on CHA >= MASTER_TRADER_CHA.
+-- STATUS: Works
+-- ------------------------------------------------------------------------
+HookFeat(FeatClasses.MasterTrader,
+    "Is Available To Learn",
+    function(self, OwnerCharacter, Yes)
+        local char = GetChar(OwnerCharacter)
+        if not char then return end
+        if not char:IsValid() then return end
+
+        -- local id             = FeatClasses.ToughBastard
+        -- AppliedModifiers[id] = AppliedModifiers[id] or {}
+        -- local charId         = tostring(char)
+        -- if not AppliedModifiers[id][charId] then
+        --     AppliedModifiers[id][charId] = true
+
+        local cha = GetAttribute(char, statMapping.CHA)
+        if cha and cha < cfg.MASTER_TRADER_CHA then
+            -- Log("[INFO] MasterTrader: blocked (CHA=" .. cha .. " < " .. cfg.MASTER_TRADER_CHA .. ")")
+            Yes:set(false)
+        elseif cha and cha >= cfg.MASTER_TRADER_CHA then
+            Yes:set(true)
+            -- Log("[INFO] MasterTrader: allowed (CHA=" .. cha .. " < " .. cfg.MASTER_TRADER_CHA .. ")")
+        end
+    end
+)
+
+-- ------------------------------------------------------------------------
 -- FEATBASE HOOK
 -- Calculation patching for multiple feats
 -- STATUS: Works partially
@@ -906,13 +989,26 @@ NotifyOnNewObject(FeatClasses.FeatBase, function()
                 local char = GetChar(characterParam)
                 if not char then return end
                 if not char:IsValid() then return end
-
                 local id = char:GetCharID()
+                -- Log(
+                --     "[INFO] GetMaxImplants: charID=" ..
+                --     tostring(id) .. " hasBionic=" .. tostring(BionicCharIDs[id] == true),
+                --     true)
+
+                -- local pm = FindFirstOf("PartyManager_C")
+                -- if pm and pm:IsValid() then
+                --     for _, name in ipairs({ "Player", "PlayerParty", "PC", "player", "Core", "party" }) do
+                --         local inParty = false
+                --         pcall(function() inParty = pm["Is CharID In Party"](pm, id, name) end)
+                --         Log("[INFO] IsCharIDInParty(" .. name .. ")=" .. tostring(inParty), true)
+                --     end
+                -- end
+
                 -- not working or working incorrectly
                 -- passes for characters without Bionic feat
                 -- not always though. Needs thorough testing
                 if char and BionicCharIDs[id] then
-                    Log("[INFO] GetMaxImplants id: " .. id, true)
+                    -- Log("[INFO] GetMaxImplants id: " .. id, true)
                     local con = GetAttribute(char, statMapping.CON)
                     local baseImplants = math.floor(con / 2) -- 1 slot per 2 CON
                     local totalMax = 7
@@ -1017,6 +1113,26 @@ RegisterInitGameStatePostHook(function()
         end
     end)
 end)
+
+-- ------------------------------------------------------------------------
+-- Trigger: AsyncLoadGameFromSlot fires when a game slot is loaded.
+-- ------------------------------------------------------------------------
+-- RegisterHook("/Game/Gameplay/System/ColonyShipGameInstanceBP.ColonyShipGameInstanceBP_C:ReceiveInit",
+--     function(self)
+--         if reCalculationDone then return end -- safety, though ReceiveInit should only fire once
+
+--         -- Use KismetSystemLibrary to set a simple delayed timer.
+--         -- World context object can be the game instance itself.
+--         UE4.KismetSystemLibrary.K2_SetTimerDelegate(
+--             self, -- WorldContextObject
+--             function()
+--                 -- Inside the timer, self will be captured (closure)
+--                 TryForcePartyRecalc(self)
+--             end,
+--             2.0,  -- delay in seconds
+--             false -- looping = false → one shot
+--         )
+--     end)
 
 -- ------------------------------------------------------------------------
 -- F8: manual re-apply

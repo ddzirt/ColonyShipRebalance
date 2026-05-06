@@ -31,7 +31,7 @@ return function(cfg)
             cfg("BUTCHER_PEN_PER_LEVEL", 2) .. "% penetration per Melee skill level.",
 
         ["/Game/Gameplay/Feats/F_H_Juggernaut.F_H_Juggernaut_C"] =
-            "Knockdowns are Stuns, melee damage +2, Armor skill gain +100%,  +1 DR. HP <= " ..
+            "No Knockdowns, melee damage +2, Armor skill gain +100%,  +1 DR. HP <= " ..
             math.floor(cfg("JUGG_MID_HP_PCT", 0.50) * 100) .. "%: +2 DR. HP <= " ..
             math.floor(cfg("JUGG_LOW_HP_PCT", 0.25) * 100) .. "%: +3 DR. HP <=13: +4 DR.",
 
@@ -73,6 +73,10 @@ return function(cfg)
             ":req REQ CON " .. cfg("TB_CON", 6),
 
         ["/Game/Gameplay/Feats/F_Bionic.F_Bionic_C"] =
-            "Max Implants +" .. cfg("BIONIC_IMPLANTS", 1) .. ".",
+            "Max Implants +" .. cfg("BIONIC_IMPLANTS", 2) .. ".",
+
+        ["/Game/Gameplay/Feats/F_MasterTrader.F_MasterTrader_C"] =
+            "Auto-Success on haggling checks, unique deals, 25% discount when buying, +1 Initial Disposition." ..
+            " :req REQ CHA " .. cfg("MASTER_TRADER_CHA", 6) .. ".",
     }
 end

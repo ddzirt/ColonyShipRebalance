@@ -87,28 +87,32 @@ Most changes are exposed in config.ini and can be tuned.
 
 * Additionally grants +1% `Critical Strike Chance` per 3 points of `Perception`.
 
-### Tough Bastard
-
-* Requires `Constitution` ≥ 6 to be available.
-
 ### Bionic(Works, partially, only for Player character now)
 
 * Now grants +2 `Implants`
 * Configurable via `BIONIC_IMPLANTS` but hard cap at 7(Game maximum)
 
+### Tough Bastard
+
+* Requires `Constitution` ≥ 6 to be available.
+
 ### Educated
 
-* Now grants +5% `Skill XP` gain
+* Now grants +15% `Skill XP` gain
 * Requires `Intelligence` ≥ 6 to be available.
+
+### MasterTrader
+
+* Requires `Charisma` ≥ 6 to be available.
 
 ### Mastermind (Heroic)
 
-* Additionally grants +5% `Skill XP` gain.
+* Additionally grants +15% `Skill XP` gain.
 
 ### Gifted (Heroic)(Works partically, +1 to stats is yet to work)
 
 * Grants +4 to stats(+1 to original)
-* Additionally grants +5% `Skill XP` gain.
+* Additionally grants +15% `Skill XP` gain.
 
 ### Healing Factor (Heroic)
 
@@ -116,10 +120,10 @@ Most changes are exposed in config.ini and can be tuned.
 
 ### Juggernaut (Heroic)
 
-* `HP` above 60%: +1 DR. (Natural)
-* `HP` ≤ 60%: +2 DR.
-* `HP` ≤ 30%: +3 DR.
-* At 13 HP or below, +4 DR.
+* `HP` above 60%: +1 `DR`. (Natural)
+* `HP` ≤ 60%: +2 `DR`.
+* `HP` ≤ 30%: +3 `DR`.
+* At 13 `HP` or below, +4 `DR`.
 
 ## License
 
