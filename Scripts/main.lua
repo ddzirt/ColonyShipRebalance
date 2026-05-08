@@ -32,6 +32,12 @@ do
 end
 
 -- ------------------------------------------------------------------------
+-- UE4SS Helpers
+-- I think I need to check what's there and incorporate some of it
+-- ------------------------------------------------------------------------
+local UEHelpers         = require("UEHelpers")
+
+-- ------------------------------------------------------------------------
 -- Local variables and caching
 -- ------------------------------------------------------------------------
 local AppliedModifiers  = {} -- redundant, maybe I'll find a way
@@ -43,7 +49,12 @@ local descriptions      = nil
 local descriptionsCache = nil  -- Cache for loaded descriptions(probably not needed but we'll see) TODO: Review this
 local configLoaded      = false
 local BionicCharIDs     = {}   -- set of charIDs that have Bionic feat
-local reCalculationDone = false
+local ItsBpLibHooked    = false
+local isFunctionsCached = false
+local cachedPlotCDO     = nil
+local cachedVCOStealFn  = nil
+local cachedCalcFn      = nil
+local cachedPlayerChar  = nil
 
 -- ------------------------------------------------------------------------
 -- Field constants (CsgCharEffects mangled property names)
@@ -284,10 +295,22 @@ local function GetSkillLevel(char, statIndex, tagged)
     return status and val or nil
 end
 
-local function trim(s)
+local function Trim(s)
     s = s:gsub("^%s+", "")
     s = s:gsub("%s+$", "")
     return s
+end
+
+local function SafeIsValid(obj)
+    if obj == nil then
+        return false
+    end
+
+    local ok, result = pcall(function()
+        return obj:IsValid()
+    end)
+
+    return ok and result
 end
 
 -- ------------------------------------------------------------------------
@@ -304,12 +327,12 @@ local function ParseIni(filePath)
 
     local result = {}
     for line in content:gmatch("[^\r\n]+") do
-        line = trim(line)
+        line = Trim(line)
         if line ~= "" and not line:match("^[;#]") then
             local key, value = line:match("^([^=]+)%s*=%s*(.+)$")
             if key and value then
-                key   = trim(key)
-                value = trim(value)
+                key   = Trim(key)
+                value = Trim(value)
                 if value == "true" then
                     result[key] = true
                 elseif value == "false" then
@@ -334,9 +357,59 @@ local function LoadConfig()
 end
 
 -- ------------------------------------------------------------------------
+-- FUNCTION CACHE TO USE FOR RECALC AND VCO STEAL
+-- ------------------------------------------------------------------------
+local function CacheFunctions()
+    ForEachUObject(function(obj, chunkIdx, objIdx)
+        if not obj:IsValid() then return end
+        local ok, name = pcall(function() return obj:GetFName():ToString() end)
+        if not ok then return end
+
+        if name == "Calc Char Effects Feats" and not cachedCalcFn then
+            local ok2, fullName = pcall(function() return obj:GetFullName() end)
+            if ok2 and fullName:find("HumanRpgCharacter") then
+                cachedCalcFn = obj
+                print("[Cache] CalcFn: " .. fullName)
+            end
+        end
+
+        if name == "VCO_Steal" and not cachedVCOStealFn then
+            cachedVCOStealFn = obj
+            local ok2, fullName = pcall(function() return obj:GetFullName() end)
+            if ok2 then print("[Cache] VCOSteal: " .. fullName) end
+        end
+
+        if name == "Default__PlotFuncs_C" and not cachedPlotCDO then
+            cachedPlotCDO = obj
+            local ok2, fullName = pcall(function() return obj:GetFullName() end)
+            if ok2 then print("[Cache] PlotCDO: " .. fullName) end
+        end
+    end)
+end
+
+local function CachePlayerChar()
+    ForEachUObject(function(obj, chunkIdx, objIdx)
+        if cachedPlayerChar then return end
+        if not obj:IsValid() then return end
+        local ok, name = pcall(function() return obj:GetFName():ToString() end)
+        if not ok then return end
+        -- Match the known instance name
+        if name:find("HumanRpgCharacter_C_") then
+            local ok2, id = pcall(function() return obj:GetCharID() end)
+            if ok2 and id == 1 then
+                cachedPlayerChar = obj
+                local fn = pcall(function()
+                    print("[Cache] PlayerChar: " .. obj:GetFullName() .. " type: " .. tostring(obj))
+                end)
+            end
+        end
+    end)
+end
+
+-- ------------------------------------------------------------------------
 -- Load descriptions
 -- ------------------------------------------------------------------------
-local function loadDescriptions()
+local function LoadDescriptions()
     -- Return cached result if already loaded
     if descriptionsCache ~= nil then
         return descriptionsCache
@@ -374,55 +447,6 @@ local function loadDescriptions()
 
     descriptionsCache = descs or {}
     return descriptionsCache
-end
-
--- ------------------------------------------------------------------------
--- Force update of character effects/feats
--- ------------------------------------------------------------------------
-local function ForcePartyRecalc(gi)
-    -- Get the game instance object
-    -- local GameInstance = FindFirstOf("ColonyShipGameInstanceBP_C")
-    -- if not GameInstance or not GameInstance:IsValid() then
-    --     Log("[WARN] ForcePartyRecalc: GameInstance not found or invalid", true)
-    --     return
-    -- end
-
-    -- local GI_CDO = GameInstance:GetClass():GetDefaultObject()
-    -- local chars = GI_CDO:GetPartyChars_Full()
-
-    -- Call the member function that returns the full party array
-    -- local chars = GameInstance:GetPartyChars_Full()
-    -- if not chars or not chars:IsValid() then
-    --     Log("[WARN] ForcePartyRecalc: GetPartyChars_Full returned nil or invalid", true)
-    --     return
-    -- end
-
-    Log("IsValid: " .. tostring(gi:IsValid()), true)
-    Log("HasFunction: " .. tostring(gi:GetClass():FindFunctionByName("GetPartyChars_Full") ~= nil), true)
-
-    -- local count = 0
-    -- for i = 1, chars:Num() do -- TArray iteration in UE4SS Lua
-    --     local char = chars:Get(i)
-    --     if char and char:IsValid() then
-    --         -- If the character crashed here, wrap in pcall
-    --         local ok, err = pcall(function()
-    --             char:CalcCharEffectsFeats(0, false)
-    --         end)
-    --         if ok then
-    --             count = count + 1
-    --         else
-    --             Log("[ERROR] ForcePartyRecalc: char failed: " .. tostring(err), true)
-    --         end
-    --     end
-    -- end
-    -- Log("[INFO] ForcePartyRecalc: recalculated " .. count .. " characters", true)
-end
-
-local function TryForcePartyRecalc(gi)
-    -- double‑check flag (the timer callback could theoretically fire after a map reload; the flag prevents it)
-    if reCalculationDone then return end
-    reCalculationDone = true
-    ForcePartyRecalc(gi)
 end
 
 -- ------------------------------------------------------------------------
@@ -464,6 +488,45 @@ local FeatBaseHandlers = {
             Set(ref, F.SkillXPGain, cfg.EDUCATED_SXP_BONUS)
             -- Log("[INFO] Educated: +" .. cfg.EDUCATED_SXP_BONUS .. "% SkillXP", true)
         end
+
+        -- local ok, err = pcall(function()
+        --     -- Calling the instance method from your dump
+        --     self["Is Recalc Required"](self, char, 0) --
+        -- end)
+
+        -- if ok then
+        --     Log("[INFO] Injected Recalc during 'Get Effects' call.", true)
+        -- else
+        --     Log("[WARN] Injected Recalc failed: " .. tostring(err), true)
+        -- end
+        -- end
+    end,
+
+    -- ------------------------------------------------------------------------
+    -- Skill Monkey
+    -- Addition:
+    -- STATUS: Experimental WIP
+    -- ------------------------------------------------------------------------
+    ["F_SkillMonkey_C"] = function(char, ref)
+        -- local id = FeatClasses.SkillMonkey
+        -- AppliedModifiers[id] = AppliedModifiers[id] or {}
+        -- local charId = tostring(char)
+        -- if not AppliedModifiers[id][charId] then
+        --     AppliedModifiers[id][charId] = true
+        -- local int = char and GetAttribute(char, statMapping.INT) or 4
+        -- if int >= cfg.EDUCATED_INT_MIN then
+        --     Set(ref, F.SkillXPGain, cfg.EDUCATED_SXP_BONUS)
+        --     -- Log("[INFO] Educated: +" .. cfg.EDUCATED_SXP_BONUS .. "% SkillXP", true)
+        -- end
+        -- end
+
+        Log("[INFO] Skill Monkey triggered")
+
+        -- local objects = FindAllOf("SkillMonkey") -- may return a table, not an object
+        -- if type(objects) == "table" then
+        --     for _, v in ipairs(objects) do
+        --         Log(v:GetFullName())
+        --     end
         -- end
     end,
 
@@ -573,7 +636,7 @@ local FeatBaseHandlers = {
         -- if not AppliedModifiers[id][charId] then
         --     AppliedModifiers[id][charId] = true
         Set(ref, F.Evasion, cfg.FR_EVASION)
-        -- Log("[INFO] FastRunner: +" .. cfg.FR_EVASION .. " Evasion")
+        Log("[INFO] FastRunner: +" .. cfg.FR_EVASION .. " Evasion", true)
         -- end
     end,
 
@@ -934,13 +997,17 @@ HookFeat(FeatClasses.MasterTrader,
 -- ------------------------------------------------------------------------
 -- FEATBASE HOOK
 -- Calculation patching for multiple feats
--- STATUS: Works partially
--- STATUS: Does not work for HealingFactor, needs another testing pass
+-- STATUS: Works
 -- ------------------------------------------------------------------------
 NotifyOnNewObject(FeatClasses.FeatBase, function()
     if FeatBaseHooked then return end
     FeatBaseHooked = true
 
+    -- ------------------------------------------------------------------------
+    -- FeatBase_C:Get Effects
+    -- Used for FeatNameCache, FeatBaseHandlers
+    -- Status: Works
+    -- ------------------------------------------------------------------------
     local ok, err = pcall(function()
         RegisterHook("/Game/Gameplay/Feats/BaseTypes/FeatBase.FeatBase_C:Get Effects",
             function(self, OwnerCharacter, UpgradeBits, Effects)
@@ -975,54 +1042,42 @@ NotifyOnNewObject(FeatClasses.FeatBase, function()
             end
         )
     end)
-
     if ok then
         Log("[INFO] Hook registered: FeatBase:Get Effects", true)
     else
         Log("[WARN] Hook FAILED: FeatBase:Get Effects | " .. tostring(err), true)
     end
+end)
 
-    ok, err = pcall(function()
+-- ------------------------------------------------------------------------
+-- ItsBpLib_C
+-- ItsBpLib_C:GetMaxImplants
+-- This is required to make Bionic work
+-- at least partically now
+-- ------------------------------------------------------------------------
+NotifyOnNewObject("/Game/Scripts/ItsBpLib.ItsBpLib_C", function()
+    if ItsBpLibHooked then return end
+    ItsBpLibHooked = true
+    local ok, err = pcall(function()
         RegisterHook("/Game/Scripts/ItsBpLib.ItsBpLib_C:GetMaxImplants",
             function(selfParam, characterParam, gatherParam, worldParam, resParam)
-                -- local characterActor = characterParam:get() -- AActor
                 local char = GetChar(characterParam)
-                if not char then return end
-                if not char:IsValid() then return end
+                if not char or not char:IsValid() then return end
                 local id = char:GetCharID()
-                -- Log(
-                --     "[INFO] GetMaxImplants: charID=" ..
-                --     tostring(id) .. " hasBionic=" .. tostring(BionicCharIDs[id] == true),
-                --     true)
-
-                -- local pm = FindFirstOf("PartyManager_C")
-                -- if pm and pm:IsValid() then
-                --     for _, name in ipairs({ "Player", "PlayerParty", "PC", "player", "Core", "party" }) do
-                --         local inParty = false
-                --         pcall(function() inParty = pm["Is CharID In Party"](pm, id, name) end)
-                --         Log("[INFO] IsCharIDInParty(" .. name .. ")=" .. tostring(inParty), true)
-                --     end
-                -- end
-
-                -- not working or working incorrectly
-                -- passes for characters without Bionic feat
-                -- not always though. Needs thorough testing
                 if char and BionicCharIDs[id] then
-                    -- Log("[INFO] GetMaxImplants id: " .. id, true)
                     local con = GetAttribute(char, statMapping.CON)
-                    local baseImplants = math.floor(con / 2) -- 1 slot per 2 CON
+                    local baseImplants = math.floor(con / 2)
                     local totalMax = 7
                     local newVal = math.min(baseImplants + cfg.BIONIC_IMPLANTS, totalMax)
-
-                    resParam:set(newVal) -- update Tooltip but I don't think it works
+                    resParam:set(newVal)
                     gatherParam:set(true)
                 end
             end)
     end)
     if ok then
-        Log("[INFO] Hook registered: ItsBpLib_C:GetMaxImplants")
+        Log("[INFO] Hook registered: ItsBpLib_C:GetMaxImplants", true)
     else
-        Log("[WARN] Hook FAILED: ItsBpLib_C:GetMaxImplants | " .. tostring(err))
+        Log("[WARN] Hook FAILED: ItsBpLib_C:GetMaxImplants | " .. tostring(err), true)
     end
 end)
 
@@ -1035,7 +1090,7 @@ local function PatchCDOs(descriptionsParam)
     local pairs, match            = pairs, string.match
     local FText, StaticFindObject = FText, StaticFindObject
     -- Use the global trim if it exists, otherwise a fallback
-    local _trim                   = trim or function(s) return s:match("^%s*(.-)%s*$") end
+    local _trim                   = Trim or function(s) return s:match("^%s*(.-)%s*$") end
 
     -- Predefine patterns (faster than compiling on the fly)
     local SUFFIX_PATTERN          = "^(.+):req$"
@@ -1078,19 +1133,27 @@ local function PatchCDOs(descriptionsParam)
         end
     end
 
-    Log(string.format("[INFO] CDO patch: %d patched, %d failed", updated, failed), true)
+    -- Log(string.format("[INFO] CDO patch: %d patched, %d failed", updated, failed), true)
     return updated > 0
 end
 
 -- ------------------------------------------------------------------------
 -- Main
+-- Status: Works
 -- ------------------------------------------------------------------------
 local function RunMod()
     InitLog()    -- should run only once
     LoadConfig() -- should run only once
-    if not descriptions then
-        descriptions = loadDescriptions()
+
+    if not isFunctionsCached then
+        CacheFunctions()
+        isFunctionsCached = true
     end
+
+    if not descriptions then
+        descriptions = LoadDescriptions()
+    end
+
     if not descriptions or next(descriptions) == nil then
         Log("[ERROR] No descriptions loaded", true)
         return false
@@ -1100,12 +1163,9 @@ end
 
 -- ------------------------------------------------------------------------
 -- Trigger: InitGameState fires on every world load.
+-- Status: Works
 -- ------------------------------------------------------------------------
 RegisterInitGameStatePostHook(function()
-    -- this at times causes hang and freeze(especially when exiting the game)
-    -- cause by other stuff invoked by mod, at least I think so(because
-    -- fixing GetHP fixed this, for one of the issues)
-    -- Log("[INFO] InitGameState - patching CDO text properties", true)
     ExecuteInGameThread(function()
         local ok = RunMod()
         if not ok then
@@ -1114,33 +1174,286 @@ RegisterInitGameStatePostHook(function()
     end)
 end)
 
--- ------------------------------------------------------------------------
--- Trigger: AsyncLoadGameFromSlot fires when a game slot is loaded.
--- ------------------------------------------------------------------------
--- RegisterHook("/Game/Gameplay/System/ColonyShipGameInstanceBP.ColonyShipGameInstanceBP_C:ReceiveInit",
---     function(self)
---         if reCalculationDone then return end -- safety, though ReceiveInit should only fire once
+local function GetPlayerCharacter()
+    local chars = FindAllOf("HumanRpgCharacter_C")
+    if not chars then return nil end
+    for _, c in ipairs(chars) do
+        if c:IsValid() then
+            local ok, id = pcall(function() return c:GetCharID() end)
+            if ok and id == 1 then return c end
+        end
+    end
+    return nil
+end
 
---         -- Use KismetSystemLibrary to set a simple delayed timer.
---         -- World context object can be the game instance itself.
---         UE4.KismetSystemLibrary.K2_SetTimerDelegate(
---             self, -- WorldContextObject
---             function()
---                 -- Inside the timer, self will be captured (closure)
---                 TryForcePartyRecalc(self)
---             end,
---             2.0,  -- delay in seconds
---             false -- looping = false → one shot
---         )
---     end)
+local function FindVisComponentForNpc(npcName)
+    local all = FindAllOf("ItsVisibilityComponent_C")
+    if not all then return nil end
+    for _, v in ipairs(all) do
+        if v:IsValid() then
+            -- GetOuter() returns the owning actor
+            local outer = v:GetOuter()
+            if outer and outer:IsValid() then
+                local outerFName = outer:GetFName():ToString()
+                if outerFName == npcName then
+                    return v
+                end
+            end
+        end
+    end
+    return nil
+end
+
+local function CalcCharEffectsFeats(char)
+    if not cachedCalcFn or not cachedCalcFn:IsValid() then return false end
+    -- Re-validate char is still alive
+    local stillValid = pcall(function()
+        local _ = char:GetCharID()
+    end)
+    if not stillValid then
+        Log("[DEBUG] char went stale", true)
+        return false
+    end
+    local ok, err = pcall(function()
+        char:ProcessEvent(cachedCalcFn, {
+            Reason              = 0,
+            ["Is Updated"]      = false,
+            ["Effects to Sum"]  = {},
+            ["Default Objects"] = {},
+            ["Recalc Required"] = false,
+        })
+    end)
+    if not ok then Log("[DEBUG] ProcessEvent error: " .. tostring(err), true) end
+    return ok
+end
+
+local function GetVCOStealFn()
+    local cdo = StaticFindObject("/Game/Gameplay/Plot/PlotFuncs.Default__PlotFuncs_C")
+    if not cdo or not cdo:IsValid() then
+        Log("[AddSteal] PlotFuncs CDO not found", true)
+        return nil, nil
+    end
+    local fn = StaticFindObject("/Game/Gameplay/Plot/PlotFuncs.PlotFuncs_C:VCO_Steal")
+    if not fn or not fn:IsValid() then
+        Log("[AddSteal] VCO_Steal UFunction not found via StaticFindObject", true)
+        return nil, nil
+    end
+    return cdo, fn
+end
+
+local function AddSteal()
+    local world = UEHelpers.GetWorld()
+    if not world or not world:IsValid() then
+        Log("[AddSteal] No world", true)
+        return
+    end
+
+    local plotCDO, fn = GetVCOStealFn()
+    if not plotCDO or not fn then return end
+
+    local BWClass = StaticFindObject("/Game/Gameplay/System/BasicOverheadWidgetComponent.BasicOverheadWidgetComponent_C")
+    if not BWClass or not BWClass:IsValid() then
+        BWClass = FindFirstOf("BasicOverheadWidgetComponent_C")
+    end
+    if not BWClass or not BWClass:IsValid() then
+        Log("[AddSteal] BWClass not found", true)
+        return
+    end
+
+    for i = 1, 5 do
+        local npcName = "NPC_Steal_" .. i
+        local npc = StaticFindObject("/Game/Maps/ThePit.ThePit:PersistentLevel." .. npcName)
+        if not npc or not npc:IsValid() then
+            Log("[AddSteal] " .. npcName .. " not found", true)
+        else
+            local vco = npc:GetComponentByClass(BWClass)
+            local vis = FindVisComponentForNpc(npcName)
+
+            if vco and vco:IsValid() and vis then
+                local ok, err = pcall(function()
+                    plotCDO:ProcessEvent(fn, {
+                        __WorldContext     = world,
+                        ["Steal Type"]     = 0,
+                        ["Skill Level"]    = 0,
+                        Item               = {},
+                        ["Credits Bonus"]  = 5000,
+                        VCO                = vco,
+                        ["Animated NPC"]   = npc,
+                        ["Visibility Set"] = vis,
+                        Specialist         = nil,
+                    })
+                end)
+                Log("[AddSteal] " .. npcName .. ": " .. (ok and "OK" or tostring(err)), true)
+            else
+                Log("[AddSteal] " .. npcName .. " missing components vco=" ..
+                    tostring(vco and vco:IsValid()) .. " vis=" .. tostring(vis ~= nil), true)
+            end
+        end
+    end
+end
 
 -- ------------------------------------------------------------------------
 -- F8: manual re-apply
+-- Status: Does nothing
 -- ------------------------------------------------------------------------
-RegisterKeyBind(Key.F8, function()
-    descriptions = nil
+-- RegisterKeyBind(Key.F8, function()
+--     descriptions = nil
+--     ExecuteInGameThread(function()
+--         local ok = RunMod()
+--         print("[Rebalance] F8 re-apply: " .. (ok and "OK" or "FAILED — check log"), true)
+--     end)
+-- end)
+
+-- RegisterKeyBind(Key.F5, function()
+--     ExecuteInGameThread(function()
+--         CacheFunctions()
+--         if cachedCalcFn then
+--             Log("[F4] CalcFn address: " .. tostring(cachedCalcFn), true)
+--             local ok, fn = pcall(function() return cachedCalcFn:GetFullName() end)
+--             Log("[F4] CalcFn fullname: " .. tostring(ok and fn or "ERR"), true)
+--         end
+--         if cachedPlotCDO then
+--             Log("[F4] PlotCDO address: " .. tostring(cachedPlotCDO))
+--             local ok, fn = pcall(function() return cachedPlotCDO:GetFullName() end)
+--             Log("[F4] PlotCDO fullname: " .. tostring(ok and fn or "ERR"), true)
+--         end
+--         if cachedVCOStealFn then
+--             Log("[F4] VCOSteal address: " .. tostring(cachedVCOStealFn))
+--             local ok, fn = pcall(function() return cachedVCOStealFn:GetFullName() end)
+--             Log("[F4] VCOSteal fullname: " .. tostring(ok and fn or "ERR"), true)
+--         end
+
+--         -- Test: call ProcessEvent with a no-op native function to isolate whether
+--         -- the issue is the UFunction or the char object
+--         local char = GetPlayerCharacter()
+--         if char and char:IsValid() then
+--             Log("[F4] char address: " .. tostring(char), true)
+--             -- Try calling a known-working native function via direct call syntax
+--             local ok2, id = pcall(function() return char:GetCharID() end)
+--             Log("[F4] GetCharID via direct call: " .. tostring(ok2 and id or "ERR"), true)
+--         end
+--     end)
+-- end)
+
+RegisterKeyBind(Key.F6, function()
+    ExecuteInGameThread(AddSteal)
+end)
+
+RegisterKeyBind(Key.F7, function()
     ExecuteInGameThread(function()
-        local ok = RunMod()
-        print("[Rebalance] F8 re-apply: " .. (ok and "OK" or "FAILED — check log"), true)
+        CachePlayerChar()
+        if not cachedPlayerChar then
+            Log("[F7] no cached char", true)
+            return
+        end
+        Log("[F7] cached char type: " .. tostring(cachedPlayerChar), true)
+
+        -- Test ProcessEvent with UObject-typed reference
+        local ok, err = pcall(function()
+            cachedPlayerChar:ProcessEvent(cachedCalcFn, {
+                Reason              = 0,
+                ["Is Updated"]      = false,
+                ["Effects to Sum"]  = {},
+                ["Default Objects"] = {},
+                ["Recalc Required"] = false,
+            })
+        end)
+        Log("[F7] ProcessEvent result: " .. (ok and "OK" or tostring(err)), true)
+
+        -- Also test UFunction direct call with UObject ref
+        local ok2, err2 = pcall(function()
+            cachedCalcFn(cachedPlayerChar, {
+                Reason              = 0,
+                ["Is Updated"]      = false,
+                ["Effects to Sum"]  = {},
+                ["Default Objects"] = {},
+                ["Recalc Required"] = false,
+            })
+        end)
+        Log("[F7] UFunction direct call result: " .. (ok2 and "OK" or tostring(err2)), true)
     end)
 end)
+
+-- RegisterKeyBind(Key.F7, function()
+--     ExecuteInGameThread(function()
+--         local char = GetPlayerCharacter()
+--         if not char or not char:IsValid() then
+--             print("[F7] no char")
+--             return
+--         end
+--         print("[F7] char type: " .. tostring(char))
+
+--         -- Test 1: ProcessEvent on char with cachedCalcFn
+--         local ok1, err1 = pcall(function()
+--             char:ProcessEvent(cachedCalcFn, {
+--                 Reason = 0,
+--                 ["Is Updated"] = false,
+--                 ["Effects to Sum"] = {},
+--                 ["Default Objects"] = {},
+--                 ["Recalc Required"] = false,
+--             })
+--         end)
+--         print("[F7] Test1 ProcessEvent on char: " .. (ok1 and "OK" or tostring(err1)))
+
+--         -- Test 2: direct call syntax (no explicit self)
+--         local ok2, err2 = pcall(function()
+--             cachedCalcFn(char, {
+--                 Reason = 0,
+--                 ["Is Updated"] = false,
+--                 ["Effects to Sum"] = {},
+--                 ["Default Objects"] = {},
+--                 ["Recalc Required"] = false,
+--             })
+--         end)
+--         print("[F7] Test2 direct UFunction call: " .. (ok2 and "OK" or tostring(err2)))
+
+--         -- Test 3: call a known working BP function via ProcessEvent on same char
+--         local testFn = StaticFindObject(
+--             "/Game/Gameplay/Characters/Core/HumanRpgCharacter.HumanRpgCharacter_C:GetCharLevel")
+--         if testFn and testFn:IsValid() then
+--             local ok3, err3 = pcall(function()
+--                 local out = {}
+--                 char:ProcessEvent(testFn, out)
+--                 print("[F7] Test3 GetCharLevel via ProcessEvent: " .. tostring(out.ReturnValue or out[1] or "nil"))
+--             end)
+--             if not ok3 then print("[F7] Test3 error: " .. tostring(err3)) end
+--         else
+--             print("[F7] Test3: GetCharLevel not found via StaticFindObject")
+--         end
+--     end)
+-- end)
+
+-- RegisterKeyBind(Key.F8, function()
+--     ExecuteInGameThread(function()
+--         CacheFunctions()
+--         print("[F4] cachedCalcFn valid: " .. tostring(cachedCalcFn and cachedCalcFn:IsValid()))
+--         print("[F4] cachedVCOStealFn valid: " .. tostring(cachedVCOStealFn and cachedVCOStealFn:IsValid()))
+--     end)
+-- end)
+
+-- RegisterKeyBind(Key.F8, function()
+--     ExecuteInGameThread(function()
+--         local paths = {
+--             "/Game/Gameplay/Characters/Core/HumanRpgCharacter.HumanRpgCharacter_C",
+--             "/Game/Gameplay/Characters/Core/RpgCharacter.RpgCharacter_C",
+--             "/Game/Gameplay/Plot/PlotFuncs.PlotFuncs_C",
+--             "/Game/Gameplay/Plot/PlotFuncs.Default__PlotFuncs_C",
+--         }
+--         for _, p in ipairs(paths) do
+--             local obj = StaticFindObject(p)
+--             print("[F4] " .. p .. " => " .. tostring(obj and obj:IsValid()))
+--         end
+
+--         -- Try getting UClass from a live instance instead
+--         local chars = FindAllOf("HumanRpgCharacter_C")
+--         if chars and chars[1] and chars[1]:IsValid() then
+--             local c = chars[1]
+--             print("[F4] Instance full name: " .. c:GetFullName())
+--             -- Attempt FindFunction directly on instance (some UE4SS builds support this)
+--             local ok, fn = pcall(function()
+--                 return c:FindFunction("Calc Char Effects Feats")
+--             end)
+--             print("[F4] FindFunction on instance: ok=" .. tostring(ok) .. " fn=" .. tostring(ok and fn and fn:IsValid()))
+--         end
+--     end)
+-- end)
