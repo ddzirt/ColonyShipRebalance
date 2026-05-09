@@ -35,31 +35,31 @@ end
 -- UE4SS Helpers
 -- I think I need to check what's there and incorporate some of it
 -- ------------------------------------------------------------------------
-local UEHelpers         = require("UEHelpers")
+local UEHelpers          = require("UEHelpers")
 
 -- ------------------------------------------------------------------------
 -- Local variables and caching
 -- ------------------------------------------------------------------------
-local AppliedModifiers  = {} -- redundant, maybe I'll find a way
-local FeatNameCache     = {}
-local FeatBaseHooked    = false
-local logFile           = nil
-local logBufferEnabled  = true -- set false to flush after every write
-local descriptions      = nil
-local descriptionsCache = nil  -- Cache for loaded descriptions(probably not needed but we'll see) TODO: Review this
-local configLoaded      = false
-local BionicCharIDs     = {}   -- set of charIDs that have Bionic feat
-local ItsBpLibHooked    = false
-local isFunctionsCached = false
-local cachedPlotCDO     = nil
-local cachedVCOStealFn  = nil
-local cachedCalcFn      = nil
-local cachedPlayerChar  = nil
+local AppliedModifiers   = {} -- redundant, maybe I'll find a way
+local FeatNameCache      = {}
+local allHooksRegistered = false
+local logFile            = nil
+local logBufferEnabled   = true -- set false to flush after every write
+local descriptions       = nil
+local descriptionsCache  = nil  -- Cache for loaded descriptions(probably not needed but we'll see) TODO: Review this
+local configLoaded       = false
+local BionicCharIDs      = {}   -- set of charIDs that have Bionic feat
+local ItsBpLibHooked     = false
+local isFunctionsCached  = false
+local cachedPlotCDO      = nil
+local cachedVCOStealFn   = nil
+local cachedCalcFn       = nil
+local cachedPlayerChar   = nil
 
 -- ------------------------------------------------------------------------
 -- Field constants (CsgCharEffects mangled property names)
 -- ------------------------------------------------------------------------
-local F                 = {
+local F                  = {
     Evasion         = "EvasionMod_76_5A03A1C64111532DC77320909200AA8C",
     Initiative      = "InitiativeMod_140_36D637CF4AF656392EE046A05B615F11",
     MaxAP           = "MaxAPMod_83_04CD14B24ACBF706E9CC78BAB1296612",
@@ -81,7 +81,7 @@ local F                 = {
 -- ------------------------------------------------------------------------
 -- Feat class references for Has Feat checks
 -- ------------------------------------------------------------------------
-local FeatClasses       = {
+local FeatClasses        = {
     FeatBase      = "/Game/Gameplay/Feats/BaseTypes/FeatBase.FeatBase_C",
     -- USUAL
     Educated      = "/Game/Gameplay/Feats/F_Educated.F_Educated_C",
@@ -107,7 +107,7 @@ local FeatClasses       = {
 -- ------------------------------------------------------------------------
 -- DEFAULTS or REVERSE ENGINEERED VALUES
 -- ------------------------------------------------------------------------
-local DEFAULTS          = {
+local DEFAULTS           = {
     LANGUAGE                = "en",
     LW_EVASION              = 16,
     LW_INITIATIVE           = 20,
@@ -125,7 +125,7 @@ local DEFAULTS          = {
     JUGG_LOW_HP_PCT         = 0.25,
     EDUCATED_SXP_BONUS      = 15,
     EDUCATED_INT_MIN        = 6,
-    MASTERMIND_SXP_BONUS    = 15,
+    MASTERMIND_SXP_BONUS    = 25,
     GIFTED_SKILL_SXP        = 15,
     HF_REGEN_PER_LEVELS     = 3,
     FR_EVASION              = 6,
@@ -138,8 +138,8 @@ local DEFAULTS          = {
     MASTER_TRADER_CHA       = 6,
     DEBUG                   = false,
 }
-local cfg               = {}
-local statMapping       = {
+local cfg                = {}
+local statMapping        = {
     STR = 0,
     DEX = 1,
     CON = 2,
@@ -147,7 +147,7 @@ local statMapping       = {
     INT = 4,
     CHA = 5,
 }
-local skillsMapping     = {
+local skillsMapping      = {
     Bladed = 0,
     Blunt = 1,
     Pistol = 2,
@@ -301,16 +301,18 @@ local function Trim(s)
     return s
 end
 
-local function SafeIsValid(obj)
-    if obj == nil then
-        return false
+local function GetPlayerCharacter()
+    local chars = FindAllOf("HumanRpgCharacter_C")
+    if not chars then return nil end
+    for _, c in ipairs(chars) do
+        if c:IsValid() then
+            -- Log what GetCharID returns raw
+            local ok, id = pcall(function() return c:GetCharID() end)
+            Log("[GetPC] IsValid=true GetCharID ok=" .. tostring(ok) .. " id=" .. tostring(id), true)
+            return c -- return first valid regardless
+        end
     end
-
-    local ok, result = pcall(function()
-        return obj:IsValid()
-    end)
-
-    return ok and result
+    return nil
 end
 
 -- ------------------------------------------------------------------------
@@ -452,20 +454,13 @@ end
 -- ------------------------------------------------------------------------
 -- Hook helper
 -- ------------------------------------------------------------------------
-local function HookFeat(classPath, fnName, callback)
-    local registered = false
-    NotifyOnNewObject(classPath, function()
-        if registered then return end
-        registered = true
-        local ok, err = pcall(function()
-            RegisterHook(classPath .. ":" .. fnName, callback)
-        end)
-        if ok then
-            Log("[INFO] Hook registered: " .. classPath .. ":" .. fnName, true)
-        else
-            Log("[WARN] Hook FAILED: " .. classPath .. ":" .. fnName .. " | " .. tostring(err), true)
-        end
-    end)
+local function TryHook(path, fn)
+    local ok, err = pcall(RegisterHook, path, fn)
+    if ok then
+        Log("[INFO] Hook registered: " .. path:match("[^/]+$"), true)
+    else
+        Log("[WARN] Hook FAILED: FeatBase:Get Effects | " .. tostring(err), true)
+    end
 end
 
 -- ------------------------------------------------------------------------
@@ -636,7 +631,7 @@ local FeatBaseHandlers = {
         -- if not AppliedModifiers[id][charId] then
         --     AppliedModifiers[id][charId] = true
         Set(ref, F.Evasion, cfg.FR_EVASION)
-        Log("[INFO] FastRunner: +" .. cfg.FR_EVASION .. " Evasion", true)
+        -- Log("[INFO] FastRunner: +" .. cfg.FR_EVASION .. " Evasion", true)
         -- end
     end,
 
@@ -705,41 +700,38 @@ local FeatBaseHandlers = {
 }
 
 -- ------------------------------------------------------------------------
--- LONE WOLF
+-- LONE WOLF HANDLER
 -- Vanilla (solo): +12 Evasion, +16 Initiative
 -- Rebalanced:     +LW_EVASION, +LW_INITIATIVE, +LW_ARMOR_PENALTY
 -- STATUS: Works
 -- ------------------------------------------------------------------------
-HookFeat(FeatClasses.LoneWolf,
-    "Get Conditional Effects",
-    function(self, OwnerCharacter, Effects, IsValid)
-        if not IsConditionMet(IsValid) then return end
+function LoneWolfHandler(self, OwnerCharacter, Effects, IsValid)
+    if not IsConditionMet(IsValid) then return end
 
-        local ref = GetEffects(Effects)
-        if not ref then return end
+    local ref = GetEffects(Effects)
+    if not ref then return end
 
-        local char = GetChar(OwnerCharacter)
-        if not char then return end
-        if not char:IsValid() then return end
+    local char = GetChar(OwnerCharacter)
+    if not char then return end
+    if not char:IsValid() then return end
 
-        -- this AppliedModifiers seems to do the throttling but
-        -- it also prevents the effect from being applied later
-        -- for character and might be potential source of crash
-        -- need to incorporate character ID somehow
-        -- and reapply when triggered again for same ID if need be
-        -- but how?
-        -- local id = FeatClasses.LoneWolf
-        -- AppliedModifiers[id] = AppliedModifiers[id] or {}
-        -- local charId = tostring(char)
-        -- if not AppliedModifiers[id][charId] then
-        --     AppliedModifiers[id][charId] = true
-        Set(ref, F.Evasion, cfg.LW_EVASION)
-        Set(ref, F.Initiative, cfg.LW_INITIATIVE)
-        Set(ref, F.ArmorPenalty, cfg.LW_ARMOR_PENALTY)
-        -- Log("[INFO] LoneWolf: applied")
-        -- end
-    end
-)
+    -- this AppliedModifiers seems to do the throttling but
+    -- it also prevents the effect from being applied later
+    -- for character and might be potential source of crash
+    -- need to incorporate character ID somehow
+    -- and reapply when triggered again for same ID if need be
+    -- but how?
+    -- local id = FeatClasses.LoneWolf
+    -- AppliedModifiers[id] = AppliedModifiers[id] or {}
+    -- local charId = tostring(char)
+    -- if not AppliedModifiers[id][charId] then
+    --     AppliedModifiers[id][charId] = true
+    Set(ref, F.Evasion, cfg.LW_EVASION)
+    Set(ref, F.Initiative, cfg.LW_INITIATIVE)
+    Set(ref, F.ArmorPenalty, cfg.LW_ARMOR_PENALTY)
+    -- Log("[INFO] LoneWolf: applied")
+    -- end
+end
 
 -- ------------------------------------------------------------------------
 -- WARRIOR
@@ -747,66 +739,60 @@ HookFeat(FeatClasses.LoneWolf,
 -- Rebalanced: +WARRIOR_ARMOR_PER_LEVEL
 -- STATUS: Works
 -- ------------------------------------------------------------------------
-HookFeat(FeatClasses.Warrior,
-    "Get Conditional Effects",
-    function(self, OwnerCharacter, Effects, IsValid)
-        if not IsConditionMet(IsValid) then return end
+function WarriorHandler(self, OwnerCharacter, Effects, IsValid)
+    if not IsConditionMet(IsValid) then return end
 
-        local ref = GetEffects(Effects)
-        if not ref then return end
+    local ref = GetEffects(Effects)
+    if not ref then return end
 
-        local char = GetChar(OwnerCharacter)
-        if not char then return end
-        if not char:IsValid() then return end
+    local char = GetChar(OwnerCharacter)
+    if not char then return end
+    if not char:IsValid() then return end
 
-        -- local id             = FeatClasses.Warrior
-        -- AppliedModifiers[id] = AppliedModifiers[id] or {}
-        -- -- Use GetName() to ensure the ID is persistent across calls
-        -- local charId         = char:GetName() -- this is BS and does not exist
-        -- Log("[DEBUG] Checking ID: " .. charId .. " | Status: " .. tostring(AppliedModifiers[id][charId]), true)
-        -- if not AppliedModifiers[id][charId] then
-        --     AppliedModifiers[id][charId] = true
-        local skillLevelBladed = GetSkillLevel(char, skillsMapping.Bladed, true)
-        local skillLevelBlunt  = GetSkillLevel(char, skillsMapping.Blunt, true)
-        local skillLevel       = skillLevelBladed + skillLevelBlunt
-        local bonus            = math.max(1, skillLevel) * cfg.WARRIOR_ARMOR_PER_LEVEL
-        Set(ref, F.ArmorPenalty, bonus)
-        -- Log("[INFO] Warrior: ArmorHandling +" .. bonus, true)
-        -- end
-    end
-)
+    -- local id             = FeatClasses.Warrior
+    -- AppliedModifiers[id] = AppliedModifiers[id] or {}
+    -- -- Use GetName() to ensure the ID is persistent across calls
+    -- local charId         = char:GetName() -- this is BS and does not exist
+    -- Log("[DEBUG] Checking ID: " .. charId .. " | Status: " .. tostring(AppliedModifiers[id][charId]), true)
+    -- if not AppliedModifiers[id][charId] then
+    --     AppliedModifiers[id][charId] = true
+    local skillLevelBladed = GetSkillLevel(char, skillsMapping.Bladed, true)
+    local skillLevelBlunt  = GetSkillLevel(char, skillsMapping.Blunt, true)
+    local skillLevel       = skillLevelBladed + skillLevelBlunt
+    local bonus            = math.max(1, skillLevel) * cfg.WARRIOR_ARMOR_PER_LEVEL
+    Set(ref, F.ArmorPenalty, bonus)
+    -- Log("[INFO] Warrior: ArmorHandling +" .. bonus, true)
+    -- end
+end
 
 -- ------------------------------------------------------------------------
 -- GLADIATOR
 -- Addition: flat +min/max melee damage
 -- STATUS: Works
 -- ------------------------------------------------------------------------
-HookFeat(FeatClasses.Gladiator,
-    "Get Conditional Effects",
-    function(self, OwnerCharacter, Effects, IsValid)
-        if not IsConditionMet(IsValid) then return end
+function GladiatorHandler(self, OwnerCharacter, Effects, IsValid)
+    if not IsConditionMet(IsValid) then return end
 
-        local ref = GetEffects(Effects)
-        if not ref then return end
+    local ref = GetEffects(Effects)
+    if not ref then return end
 
-        local char = GetChar(OwnerCharacter)
-        if not char then return end
-        if not char:IsValid() then return end
+    local char = GetChar(OwnerCharacter)
+    if not char then return end
+    if not char:IsValid() then return end
 
-        -- local id             = FeatClasses.Warrior
-        -- AppliedModifiers[id] = AppliedModifiers[id] or {}
-        -- -- Use GetName() to ensure the ID is persistent across calls
-        -- local charId         = char:GetName() -- this is BS and does not exist
-        -- Log("[DEBUG] Checking ID: " .. charId .. " | Status: " .. tostring(AppliedModifiers[id][charId]), true)
-        -- if not AppliedModifiers[id][charId] then
-        --     AppliedModifiers[id][charId] = true
-        Set(ref, F.MeleeMinDMG, cfg.GLADIATOR_MIN)
-        Set(ref, F.MeleeMaxDMG, cfg.GLADIATOR_MAX)
-        -- Log("[INFO] Gladiator: +" .. cfg.GLADIATOR_MIN .. "/" .. cfg.GLADIATOR_MAX .. " min/max dmg", true)
-        -- Log("[INFO] Warrior: ArmorHandling +" .. bonus, true)
-        -- end
-    end
-)
+    -- local id             = FeatClasses.Warrior
+    -- AppliedModifiers[id] = AppliedModifiers[id] or {}
+    -- -- Use GetName() to ensure the ID is persistent across calls
+    -- local charId         = char:GetName() -- this is BS and does not exist
+    -- Log("[DEBUG] Checking ID: " .. charId .. " | Status: " .. tostring(AppliedModifiers[id][charId]), true)
+    -- if not AppliedModifiers[id][charId] then
+    --     AppliedModifiers[id][charId] = true
+    Set(ref, F.MeleeMinDMG, cfg.GLADIATOR_MIN)
+    Set(ref, F.MeleeMaxDMG, cfg.GLADIATOR_MAX)
+    -- Log("[INFO] Gladiator: +" .. cfg.GLADIATOR_MIN .. "/" .. cfg.GLADIATOR_MAX .. " min/max dmg", true)
+    -- Log("[INFO] Warrior: ArmorHandling +" .. bonus, true)
+    -- end
+end
 
 -- ------------------------------------------------------------------------
 -- BASHER (blunt weapons)
@@ -814,34 +800,31 @@ HookFeat(FeatClasses.Gladiator,
 -- Rebalanced: +THC, +knockdown, +aimed THC per melee skill level
 -- STATUS: Works
 -- ------------------------------------------------------------------------
-HookFeat(FeatClasses.Basher,
-    "Get Conditional Effects",
-    function(self, OwnerCharacter, Effects, IsValid)
-        if not IsConditionMet(IsValid) then return end
+function BasherHandler(self, OwnerCharacter, Effects, IsValid)
+    if not IsConditionMet(IsValid) then return end
 
-        local ref = GetEffects(Effects)
-        if not ref then return end
+    local ref = GetEffects(Effects)
+    if not ref then return end
 
-        local char = GetChar(OwnerCharacter)
-        if not char then return end
-        if not char:IsValid() then return end
+    local char = GetChar(OwnerCharacter)
+    if not char then return end
+    if not char:IsValid() then return end
 
-        -- local id             = FeatClasses.Basher
-        -- AppliedModifiers[id] = AppliedModifiers[id] or {}
-        -- local charId         = tostring(char)
-        -- if not AppliedModifiers[id][charId] then
-        --     AppliedModifiers[id][charId] = true
-        local skillLevelBladed = GetSkillLevel(char, skillsMapping.Bladed, true)
-        local skillLevelBlunt  = GetSkillLevel(char, skillsMapping.Blunt, true)
-        local skillLevel       = skillLevelBladed + skillLevelBlunt
-        Set(ref, F.PenetrationPct, 0)
-        Set(ref, F.MeleeTHC, cfg.BASHER_THC)
-        Set(ref, F.KnockdownChance, cfg.BASHER_KNOCKDOWN)
-        Set(ref, F.AimedTHC, math.max(1, skillLevel) * cfg.BASHER_AIMED_PER_LEVEL)
-        -- Log("[INFO] Basher: applied (melee skill=" .. skillLevel .. ")")
-        -- end
-    end
-)
+    -- local id             = FeatClasses.Basher
+    -- AppliedModifiers[id] = AppliedModifiers[id] or {}
+    -- local charId         = tostring(char)
+    -- if not AppliedModifiers[id][charId] then
+    --     AppliedModifiers[id][charId] = true
+    local skillLevelBladed = GetSkillLevel(char, skillsMapping.Bladed, true)
+    local skillLevelBlunt  = GetSkillLevel(char, skillsMapping.Blunt, true)
+    local skillLevel       = skillLevelBladed + skillLevelBlunt
+    Set(ref, F.PenetrationPct, 0)
+    Set(ref, F.MeleeTHC, cfg.BASHER_THC)
+    Set(ref, F.KnockdownChance, cfg.BASHER_KNOCKDOWN)
+    Set(ref, F.AimedTHC, math.max(1, skillLevel) * cfg.BASHER_AIMED_PER_LEVEL)
+    -- Log("[INFO] Basher: applied (melee skill=" .. skillLevel .. ")")
+    -- end
+end
 
 -- ------------------------------------------------------------------------
 -- BUTCHER (bladed weapons)
@@ -849,66 +832,60 @@ HookFeat(FeatClasses.Basher,
 -- Rebalanced: +THC, +crit, +penetration per melee skill level
 -- STATUS: Works
 -- ------------------------------------------------------------------------
-HookFeat(FeatClasses.Butcher,
-    "Get Conditional Effects",
-    function(self, OwnerCharacter, Effects, IsValid)
-        if not IsConditionMet(IsValid) then return end
+function ButcherHandler(self, OwnerCharacter, Effects, IsValid)
+    if not IsConditionMet(IsValid) then return end
 
-        local ref = GetEffects(Effects)
-        if not ref then return end
+    local ref = GetEffects(Effects)
+    if not ref then return end
 
-        local char = GetChar(OwnerCharacter)
-        if not char then return end
-        if not char:IsValid() then return end
+    local char = GetChar(OwnerCharacter)
+    if not char then return end
+    if not char:IsValid() then return end
 
-        -- local id             = FeatClasses.Butcher
-        -- AppliedModifiers[id] = AppliedModifiers[id] or {}
-        -- local charId         = tostring(char)
-        -- if not AppliedModifiers[id][charId] then
-        --     AppliedModifiers[id][charId] = true
-        local skillLevelBladed = GetSkillLevel(char, skillsMapping.Bladed, true)
-        local skillLevelBlunt  = GetSkillLevel(char, skillsMapping.Blunt, true)
-        local skillLevel       = skillLevelBladed + skillLevelBlunt
-        Set(ref, F.AimedTHC, 0)
-        Set(ref, F.MeleeTHC, cfg.BUTCHER_THC)
-        Set(ref, F.CSC, cfg.BUTCHER_CSC)
-        Set(ref, F.PenetrationPct, math.max(1, skillLevel) * cfg.BUTCHER_PEN_PER_LEVEL)
-        -- Log("[INFO] Butcher: applied (melee skill=" .. skillLevel .. ")")
-        -- end
-    end
-)
+    -- local id             = FeatClasses.Butcher
+    -- AppliedModifiers[id] = AppliedModifiers[id] or {}
+    -- local charId         = tostring(char)
+    -- if not AppliedModifiers[id][charId] then
+    --     AppliedModifiers[id][charId] = true
+    local skillLevelBladed = GetSkillLevel(char, skillsMapping.Bladed, true)
+    local skillLevelBlunt  = GetSkillLevel(char, skillsMapping.Blunt, true)
+    local skillLevel       = skillLevelBladed + skillLevelBlunt
+    Set(ref, F.AimedTHC, 0)
+    Set(ref, F.MeleeTHC, cfg.BUTCHER_THC)
+    Set(ref, F.CSC, cfg.BUTCHER_CSC)
+    Set(ref, F.PenetrationPct, math.max(1, skillLevel) * cfg.BUTCHER_PEN_PER_LEVEL)
+    -- Log("[INFO] Butcher: applied (melee skill=" .. skillLevel .. ")")
+    -- end
+end
 
 -- ------------------------------------------------------------------------
 -- HEAVY HITTER
 -- Addition: +CSC per N points of Perception
 -- STATUS: Works
 -- ------------------------------------------------------------------------
-HookFeat(FeatClasses.HeavyHitter,
-    "Get Conditional Effects",
-    function(self, OwnerCharacter, Effects, IsValid)
-        if not IsConditionMet(IsValid) then return end
+function HeavyHitterHandler(self, OwnerCharacter, Effects, IsValid)
+    if not IsConditionMet(IsValid) then return end
 
-        local ref = GetEffects(Effects)
-        if not ref then return end
+    local ref = GetEffects(Effects)
+    if not ref then return end
 
-        local char = GetChar(OwnerCharacter)
-        if not char then return end
-        if not char:IsValid() then return end
+    local char = GetChar(OwnerCharacter)
+    if not char then return end
+    if not char:IsValid() then return end
 
-        -- local id             = FeatClasses.HeavyHitter
-        -- AppliedModifiers[id] = AppliedModifiers[id] or {}
-        -- local charId         = tostring(char)
-        -- if not AppliedModifiers[id][charId] then
-        --     AppliedModifiers[id][charId] = true
-        local per       = GetAttribute(char, statMapping.PER)
-        local critBonus = math.floor(per / cfg.HH_PER) * cfg.HH_CRIT_PER_STEP
-        if critBonus > 0 then
-            Set(ref, F.CSC, critBonus)
-            -- Log("[INFO] HeavyHitter: +" .. critBonus .. "% CSC (Per=" .. per .. ")")
-        end
-        -- end
+    -- local id             = FeatClasses.HeavyHitter
+    -- AppliedModifiers[id] = AppliedModifiers[id] or {}
+    -- local charId         = tostring(char)
+    -- if not AppliedModifiers[id][charId] then
+    --     AppliedModifiers[id][charId] = true
+    local per       = GetAttribute(char, statMapping.PER)
+    local critBonus = math.floor(per / cfg.HH_PER) * cfg.HH_CRIT_PER_STEP
+    if critBonus > 0 then
+        Set(ref, F.CSC, critBonus)
+        -- Log("[INFO] HeavyHitter: +" .. critBonus .. "% CSC (Per=" .. per .. ")")
     end
-)
+    -- end
+end
 
 -- ------------------------------------------------------------------------
 -- EDUCATED — Is Available To Learn
@@ -916,138 +893,74 @@ HookFeat(FeatClasses.HeavyHitter,
 -- Signature (dump L82223): (OwnerCharacter) -> Yes (BoolProperty)
 -- STATUS: Works
 -- ------------------------------------------------------------------------
-HookFeat(FeatClasses.Educated,
-    "Is Available To Learn",
-    function(self, OwnerCharacter, Yes)
-        local char = GetChar(OwnerCharacter)
-        if not char then return end
-        if not char:IsValid() then return end
+function EducatedHandler(self, OwnerCharacter, Yes)
+    local char = GetChar(OwnerCharacter)
+    if not char then return end
+    if not char:IsValid() then return end
 
-        -- local id             = FeatClasses.Educated
-        -- AppliedModifiers[id] = AppliedModifiers[id] or {}
-        -- local charId         = tostring(char)
-        -- if not AppliedModifiers[id][charId] then
-        --     AppliedModifiers[id][charId] = true
+    -- local id             = FeatClasses.Educated
+    -- AppliedModifiers[id] = AppliedModifiers[id] or {}
+    -- local charId         = tostring(char)
+    -- if not AppliedModifiers[id][charId] then
+    --     AppliedModifiers[id][charId] = true
 
-        local int = GetAttribute(char, statMapping.INT)
-        if int and int < cfg.EDUCATED_INT_MIN then
-            -- Log("[INFO] Educated: blocked (INT=" .. int .. " < " .. cfg.EDUCATED_INT_MIN .. ")")
-            Yes:set(false)
-        end
-        -- end
+    local int = GetAttribute(char, statMapping.INT)
+    if int and int < cfg.EDUCATED_INT_MIN then
+        -- Log("[INFO] Educated: blocked (INT=" .. int .. " < " .. cfg.EDUCATED_INT_MIN .. ")")
+        Yes:set(false)
     end
-)
+    -- end
+end
 
 -- ------------------------------------------------------------------------
 -- TOUGH BASTARD — Is Available To Learn
 -- Gates feat selection on CON >= TB_CON.
 -- STATUS: Works
 -- ------------------------------------------------------------------------
-HookFeat(FeatClasses.ToughBastard,
-    "Is Available To Learn",
-    function(self, OwnerCharacter, Yes)
-        local char = GetChar(OwnerCharacter)
-        if not char then return end
-        if not char:IsValid() then return end
+function MasterTraderHandler(self, OwnerCharacter, Yes)
+    local char = GetChar(OwnerCharacter)
+    if not char then return end
+    if not char:IsValid() then return end
 
-        -- local id             = FeatClasses.ToughBastard
-        -- AppliedModifiers[id] = AppliedModifiers[id] or {}
-        -- local charId         = tostring(char)
-        -- if not AppliedModifiers[id][charId] then
-        --     AppliedModifiers[id][charId] = true
+    -- local id             = FeatClasses.ToughBastard
+    -- AppliedModifiers[id] = AppliedModifiers[id] or {}
+    -- local charId         = tostring(char)
+    -- if not AppliedModifiers[id][charId] then
+    --     AppliedModifiers[id][charId] = true
 
-        local con = GetAttribute(char, statMapping.CON)
-        if con and con < cfg.TB_CON then
-            -- Log("[INFO] ToughBastard: blocked (CON=" .. con .. " < " .. cfg.TB_CON .. ")")
-            Yes:set(false)
-        end
-        -- end
+    local con = GetAttribute(char, statMapping.CON)
+    if con and con < cfg.TB_CON then
+        -- Log("[INFO] ToughBastard: blocked (CON=" .. con .. " < " .. cfg.TB_CON .. ")")
+        Yes:set(false)
     end
-)
+    -- end
+end
 
 -- ------------------------------------------------------------------------
 -- MASTER TRADER — Is Available To Learn
 -- Gates feat selection on CHA >= MASTER_TRADER_CHA.
 -- STATUS: Works
 -- ------------------------------------------------------------------------
-HookFeat(FeatClasses.MasterTrader,
-    "Is Available To Learn",
-    function(self, OwnerCharacter, Yes)
-        local char = GetChar(OwnerCharacter)
-        if not char then return end
-        if not char:IsValid() then return end
+function ToughBastardHandler(self, OwnerCharacter, Yes)
+    local char = GetChar(OwnerCharacter)
+    if not char then return end
+    if not char:IsValid() then return end
 
-        -- local id             = FeatClasses.ToughBastard
-        -- AppliedModifiers[id] = AppliedModifiers[id] or {}
-        -- local charId         = tostring(char)
-        -- if not AppliedModifiers[id][charId] then
-        --     AppliedModifiers[id][charId] = true
+    -- local id             = FeatClasses.ToughBastard
+    -- AppliedModifiers[id] = AppliedModifiers[id] or {}
+    -- local charId         = tostring(char)
+    -- if not AppliedModifiers[id][charId] then
+    --     AppliedModifiers[id][charId] = true
 
-        local cha = GetAttribute(char, statMapping.CHA)
-        if cha and cha < cfg.MASTER_TRADER_CHA then
-            -- Log("[INFO] MasterTrader: blocked (CHA=" .. cha .. " < " .. cfg.MASTER_TRADER_CHA .. ")")
-            Yes:set(false)
-        elseif cha and cha >= cfg.MASTER_TRADER_CHA then
-            Yes:set(true)
-            -- Log("[INFO] MasterTrader: allowed (CHA=" .. cha .. " < " .. cfg.MASTER_TRADER_CHA .. ")")
-        end
+    local cha = GetAttribute(char, statMapping.CHA)
+    if cha and cha < cfg.MASTER_TRADER_CHA then
+        -- Log("[INFO] MasterTrader: blocked (CHA=" .. cha .. " < " .. cfg.MASTER_TRADER_CHA .. ")")
+        Yes:set(false)
+    elseif cha and cha >= cfg.MASTER_TRADER_CHA then
+        Yes:set(true)
+        -- Log("[INFO] MasterTrader: allowed (CHA=" .. cha .. " < " .. cfg.MASTER_TRADER_CHA .. ")")
     end
-)
-
--- ------------------------------------------------------------------------
--- FEATBASE HOOK
--- Calculation patching for multiple feats
--- STATUS: Works
--- ------------------------------------------------------------------------
-NotifyOnNewObject(FeatClasses.FeatBase, function()
-    if FeatBaseHooked then return end
-    FeatBaseHooked = true
-
-    -- ------------------------------------------------------------------------
-    -- FeatBase_C:Get Effects
-    -- Used for FeatNameCache, FeatBaseHandlers
-    -- Status: Works
-    -- ------------------------------------------------------------------------
-    local ok, err = pcall(function()
-        RegisterHook("/Game/Gameplay/Feats/BaseTypes/FeatBase.FeatBase_C:Get Effects",
-            function(self, OwnerCharacter, UpgradeBits, Effects)
-                local featName = ""
-                local nameOk = pcall(function() featName = self:get():GetFName():ToString() end)
-                if not nameOk or featName == "" then return end
-
-                local ref = GetEffects(Effects)
-                if not ref then return end
-
-                local char = GetChar(OwnerCharacter)
-                if not char then return end
-                if not char:IsValid() then return end
-
-                -- Memoization: Check if we already stripped this specific instance name
-                local baseName = FeatNameCache[featName]
-                if not baseName then
-                    -- 1. Strip the "Default__" prefix (if present)
-                    local strippedName = featName:gsub("^Default__", "")
-                    -- 2. Extract the core class name (e.g., "F_Educated_C" from "F_Educated_C_123")
-                    baseName = strippedName:match("(.-_C)") or strippedName
-                    FeatNameCache[featName] = baseName
-                    -- Log("[INFO] handler strippedName: " .. strippedName, true)
-                end
-
-                -- Execute handler if it exists in the dispatch table
-                local handler = FeatBaseHandlers[baseName]
-                if handler then
-                    -- Log("[INFO] handler baseName: " .. baseName, true)
-                    handler(char, ref)
-                end
-            end
-        )
-    end)
-    if ok then
-        Log("[INFO] Hook registered: FeatBase:Get Effects", true)
-    else
-        Log("[WARN] Hook FAILED: FeatBase:Get Effects | " .. tostring(err), true)
-    end
-end)
+end
 
 -- ------------------------------------------------------------------------
 -- ItsBpLib_C
@@ -1055,30 +968,73 @@ end)
 -- This is required to make Bionic work
 -- at least partically now
 -- ------------------------------------------------------------------------
-NotifyOnNewObject("/Game/Scripts/ItsBpLib.ItsBpLib_C", function()
-    if ItsBpLibHooked then return end
-    ItsBpLibHooked = true
-    local ok, err = pcall(function()
-        RegisterHook("/Game/Scripts/ItsBpLib.ItsBpLib_C:GetMaxImplants",
-            function(selfParam, characterParam, gatherParam, worldParam, resParam)
-                local char = GetChar(characterParam)
-                if not char or not char:IsValid() then return end
-                local id = char:GetCharID()
-                if char and BionicCharIDs[id] then
-                    local con = GetAttribute(char, statMapping.CON)
-                    local baseImplants = math.floor(con / 2)
-                    local totalMax = 7
-                    local newVal = math.min(baseImplants + cfg.BIONIC_IMPLANTS, totalMax)
-                    resParam:set(newVal)
-                    gatherParam:set(true)
-                end
-            end)
-    end)
-    if ok then
-        Log("[INFO] Hook registered: ItsBpLib_C:GetMaxImplants", true)
-    else
-        Log("[WARN] Hook FAILED: ItsBpLib_C:GetMaxImplants | " .. tostring(err), true)
+function ImplantHandler(self, characterParam, gatherParam, worldParam, resParam)
+    local char = GetChar(characterParam)
+    if not char or not char:IsValid() then return end
+    local id = char:GetCharID()
+    if char and BionicCharIDs[id] then
+        local con = GetAttribute(char, statMapping.CON)
+        local baseImplants = math.floor(con / 2)
+        local totalMax = 7
+        local newVal = math.min(baseImplants + cfg.BIONIC_IMPLANTS, totalMax)
+        resParam:set(newVal)
+        gatherParam:set(true)
     end
+end
+
+-- ------------------------------------------------------------------------
+-- Hook mod logic
+-- ------------------------------------------------------------------------
+NotifyOnNewObject("/Game/Gameplay/Characters/Core/HumanRpgCharacter.HumanRpgCharacter_C", function()
+    if allHooksRegistered then return end
+    allHooksRegistered = true
+    Log("[INFO] HumanRpgCharacter loaded — registering all hooks", true)
+
+    -- FeatBase Get Effects
+    TryHook("/Game/Gameplay/Feats/BaseTypes/FeatBase.FeatBase_C:Get Effects",
+        function(self, OwnerCharacter, UpgradeBits, Effects)
+            local featName = ""
+            local nameOk = pcall(function() featName = self:get():GetFName():ToString() end)
+            if not nameOk or featName == "" then return end
+
+            local ref = GetEffects(Effects)
+            if not ref then return end
+
+            local char = GetChar(OwnerCharacter)
+            if not char then return end
+            if not char:IsValid() then return end
+
+            -- Memoization: Check if we already stripped this specific instance name
+            local baseName = FeatNameCache[featName]
+            if not baseName then
+                -- 1. Strip the "Default__" prefix (if present)
+                local strippedName = featName:gsub("^Default__", "")
+                -- 2. Extract the core class name (e.g., "F_Educated_C" from "F_Educated_C_123")
+                baseName = strippedName:match("(.-_C)") or strippedName
+                FeatNameCache[featName] = baseName
+                -- Log("[INFO] handler strippedName: " .. strippedName, true)
+            end
+
+            -- Execute handler if it exists in the dispatch table
+            local handler = FeatBaseHandlers[baseName]
+            if handler then
+                -- Log("[INFO] handler baseName: " .. baseName, true)
+                handler(char, ref)
+            end
+        end
+    )
+
+    -- Individual feat hooks
+    TryHook("/Game/Gameplay/Feats/F_LoneWolf.F_LoneWolf_C:Get Conditional Effects", LoneWolfHandler)
+    TryHook("/Game/Gameplay/Feats/F_Warrior.F_Warrior_C:Get Conditional Effects", WarriorHandler)
+    TryHook("/Game/Gameplay/Feats/F_Gladiator.F_Gladiator_C:Get Conditional Effects", GladiatorHandler)
+    TryHook("/Game/Gameplay/Feats/F_Basher.F_Basher_C:Get Conditional Effects", BasherHandler)
+    TryHook("/Game/Gameplay/Feats/F_Butcher.F_Butcher_C:Get Conditional Effects", ButcherHandler)
+    TryHook("/Game/Gameplay/Feats/F_HeavyHitter.F_HeavyHitter_C:Get Conditional Effects", HeavyHitterHandler)
+    TryHook("/Game/Gameplay/Feats/F_Educated.F_Educated_C:Is Available To Learn", EducatedHandler)
+    TryHook("/Game/Gameplay/Feats/F_MasterTrader.F_MasterTrader_C:Is Available To Learn", MasterTraderHandler)
+    TryHook("/Game/Gameplay/Feats/F_ToughBastard.F_ToughBastard_C:Is Available To Learn", ToughBastardHandler)
+    TryHook("/Game/Scripts/ItsBpLib.ItsBpLib_C:GetMaxImplants", ImplantHandler)
 end)
 
 -- ------------------------------------------------------------------------
@@ -1174,18 +1130,7 @@ RegisterInitGameStatePostHook(function()
     end)
 end)
 
-local function GetPlayerCharacter()
-    local chars = FindAllOf("HumanRpgCharacter_C")
-    if not chars then return nil end
-    for _, c in ipairs(chars) do
-        if c:IsValid() then
-            local ok, id = pcall(function() return c:GetCharID() end)
-            if ok and id == 1 then return c end
-        end
-    end
-    return nil
-end
-
+-- Testing
 local function FindVisComponentForNpc(npcName)
     local all = FindAllOf("ItsVisibilityComponent_C")
     if not all then return nil end
@@ -1239,6 +1184,20 @@ local function GetVCOStealFn()
         return nil, nil
     end
     return cdo, fn
+end
+
+local function GetAsUObject(actor)
+    local fullPath = actor:GetFullName()
+    -- GetFullName returns "ClassName /Path/To/Instance"
+    -- Extract just the path part
+    local path = fullPath:match("^%S+ (.+)$")
+    if not path then return nil end
+    local obj = StaticFindObject(path)
+    if obj and obj:IsValid() then
+        print("[DEBUG] UObject type: " .. tostring(obj))
+        return obj
+    end
+    return nil
 end
 
 local function AddSteal()
@@ -1335,101 +1294,136 @@ end
 --     end)
 -- end)
 
-RegisterKeyBind(Key.F6, function()
-    ExecuteInGameThread(AddSteal)
-end)
-
-RegisterKeyBind(Key.F7, function()
-    ExecuteInGameThread(function()
-        CachePlayerChar()
-        if not cachedPlayerChar then
-            Log("[F7] no cached char", true)
-            return
-        end
-        Log("[F7] cached char type: " .. tostring(cachedPlayerChar), true)
-
-        -- Test ProcessEvent with UObject-typed reference
-        local ok, err = pcall(function()
-            cachedPlayerChar:ProcessEvent(cachedCalcFn, {
-                Reason              = 0,
-                ["Is Updated"]      = false,
-                ["Effects to Sum"]  = {},
-                ["Default Objects"] = {},
-                ["Recalc Required"] = false,
-            })
-        end)
-        Log("[F7] ProcessEvent result: " .. (ok and "OK" or tostring(err)), true)
-
-        -- Also test UFunction direct call with UObject ref
-        local ok2, err2 = pcall(function()
-            cachedCalcFn(cachedPlayerChar, {
-                Reason              = 0,
-                ["Is Updated"]      = false,
-                ["Effects to Sum"]  = {},
-                ["Default Objects"] = {},
-                ["Recalc Required"] = false,
-            })
-        end)
-        Log("[F7] UFunction direct call result: " .. (ok2 and "OK" or tostring(err2)), true)
-    end)
-end)
+-- RegisterKeyBind(Key.F4, function()
+--     ExecuteInGameThread(function()
+--         -- Hook the function to observe when the game calls it naturally
+--         -- and capture the self object type at that moment
+--         local hooked = false
+--         local ok, err = pcall(function()
+--             RegisterHook("/Game/Gameplay/Characters/Core/HumanRpgCharacter.HumanRpgCharacter_C:Calc Char Effects Feats",
+--                 function(selfParam, reasonParam, isUpdatedParam, effectsParam, defaultObjParam, recalcParam)
+--                     if hooked then return end
+--                     hooked = true
+--                     local self = selfParam:Get()
+--                     print("[Hook] CalcFeatEffects fired!")
+--                     print("[Hook] self type: " .. tostring(self))
+--                     print("[Hook] self valid: " .. tostring(self and self:IsValid()))
+--                     local ok2, id = pcall(function() return self:GetCharID() end)
+--                     print("[Hook] charID: " .. tostring(ok2 and id or "ERR"))
+--                     local ok3, reason = pcall(function() return reasonParam:get() end)
+--                     print("[Hook] Reason value: " .. tostring(ok3 and reason or "ERR"))
+--                 end
+--             )
+--         end)
+--         print("[F4] Hook registered: " .. (ok and "OK" or tostring(err)))
+--     end)
+-- end)
 
 -- RegisterKeyBind(Key.F7, function()
 --     ExecuteInGameThread(function()
 --         local char = GetPlayerCharacter()
---         if not char or not char:IsValid() then
---             print("[F7] no char")
+--         if not char then
+--             Log("[F7] no char", true)
 --             return
 --         end
---         print("[F7] char type: " .. tostring(char))
 
---         -- Test 1: ProcessEvent on char with cachedCalcFn
---         local ok1, err1 = pcall(function()
---             char:ProcessEvent(cachedCalcFn, {
---                 Reason = 0,
---                 ["Is Updated"] = false,
---                 ["Effects to Sum"] = {},
---                 ["Default Objects"] = {},
---                 ["Recalc Required"] = false,
---             })
---         end)
---         print("[F7] Test1 ProcessEvent on char: " .. (ok1 and "OK" or tostring(err1)))
-
---         -- Test 2: direct call syntax (no explicit self)
---         local ok2, err2 = pcall(function()
---             cachedCalcFn(char, {
---                 Reason = 0,
---                 ["Is Updated"] = false,
---                 ["Effects to Sum"] = {},
---                 ["Default Objects"] = {},
---                 ["Recalc Required"] = false,
---             })
---         end)
---         print("[F7] Test2 direct UFunction call: " .. (ok2 and "OK" or tostring(err2)))
-
---         -- Test 3: call a known working BP function via ProcessEvent on same char
---         local testFn = StaticFindObject(
---             "/Game/Gameplay/Characters/Core/HumanRpgCharacter.HumanRpgCharacter_C:GetCharLevel")
---         if testFn and testFn:IsValid() then
---             local ok3, err3 = pcall(function()
---                 local out = {}
---                 char:ProcessEvent(testFn, out)
---                 print("[F7] Test3 GetCharLevel via ProcessEvent: " .. tostring(out.ReturnValue or out[1] or "nil"))
---             end)
---             if not ok3 then print("[F7] Test3 error: " .. tostring(err3)) end
---         else
---             print("[F7] Test3: GetCharLevel not found via StaticFindObject")
+--         local uobj = GetAsUObject(char)
+--         if not uobj then
+--             Log("[F7] GetAsUObject failed", true)
+--             return
 --         end
+--         Log("[F7] uobj type: " .. tostring(uobj), true)
+
+--         local ok, err = pcall(function()
+--             uobj:ProcessEvent(cachedCalcFn, {
+--                 Reason              = 0,
+--                 ["Is Updated"]      = false,
+--                 ["Effects to Sum"]  = {},
+--                 ["Default Objects"] = {},
+--                 ["Recalc Required"] = false,
+--             })
+--         end)
+--         Log("[F7] ProcessEvent: " .. (ok and "OK" or tostring(err)), true)
 --     end)
 -- end)
 
--- RegisterKeyBind(Key.F8, function()
+-- RegisterKeyBind(Key.F6, function()
+--     ExecuteInGameThread(AddSteal)
+-- end)
+
+-- RegisterKeyBind(Key.F7, function()
 --     ExecuteInGameThread(function()
---         CacheFunctions()
---         print("[F4] cachedCalcFn valid: " .. tostring(cachedCalcFn and cachedCalcFn:IsValid()))
---         print("[F4] cachedVCOStealFn valid: " .. tostring(cachedVCOStealFn and cachedVCOStealFn:IsValid()))
+--         CachePlayerChar()
+--         if not cachedPlayerChar then
+--             Log("[F7] no cached char", true)
+--             return
+--         end
+--         Log("[F7] cached char type: " .. tostring(cachedPlayerChar), true)
+
+--         -- Test ProcessEvent with UObject-typed reference
+--         local ok, err = pcall(function()
+--             cachedPlayerChar:ProcessEvent(cachedCalcFn, {
+--                 Reason              = 0,
+--                 ["Is Updated"]      = false,
+--                 ["Effects to Sum"]  = {},
+--                 ["Default Objects"] = {},
+--                 ["Recalc Required"] = false,
+--             })
+--         end)
+--         Log("[F7] ProcessEvent result: " .. (ok and "OK" or tostring(err)), true)
+
+--         -- Also test UFunction direct call with UObject ref
+--         local ok2, err2 = pcall(function()
+--             cachedCalcFn(cachedPlayerChar, {
+--                 Reason              = 0,
+--                 ["Is Updated"]      = false,
+--                 ["Effects to Sum"]  = {},
+--                 ["Default Objects"] = {},
+--                 ["Recalc Required"] = false,
+--             })
+--         end)
+--         Log("[F7] UFunction direct call result: " .. (ok2 and "OK" or tostring(err2)), true)
 --     end)
 -- end)
+
+RegisterKeyBind(Key.F7, function()
+    ExecuteInGameThread(function()
+        local char = GetPlayerCharacter()
+        if not char or not char:IsValid() then
+            Log("[F7] no char", true)
+            return
+        end
+
+        local ok1, id = pcall(function() return char:GetCharID() end)
+        Log("[F7] char id=" .. tostring(ok and id or "ERR"), true)
+
+        -- Attempt 1: method syntax
+        local ok2, err1 = pcall(function()
+            char["Calc Char Effects Feats"](char, { Reason = 0 })
+        end)
+        Log("[F7] method syntax: " .. (ok2 and "OK" or tostring(err1)), true)
+
+        -- -- Attempt 3: cached fn with only Reason
+        -- local ok3, err3 = pcall(function()
+        --     cachedCalcFn(char, { Reason = 0 })
+        -- end)
+        -- Log("[F7] cachedFn Reason only: " .. (ok3 and "OK" or tostring(err3)), true)
+
+        -- -- Attempt 4: no params at all
+        -- local ok4, err4 = pcall(function()
+        --     cachedCalcFn(char, {})
+        -- end)
+        -- Log("[F7] cachedFn empty params: " .. (ok4 and "OK" or tostring(err4)), true)
+    end)
+end)
+
+RegisterKeyBind(Key.F8, function()
+    ExecuteInGameThread(function()
+        CacheFunctions()
+        Log("[F4] cachedCalcFn valid: " .. tostring(cachedCalcFn and cachedCalcFn:IsValid()), true)
+        Log("[F4] cachedVCOStealFn valid: " .. tostring(cachedVCOStealFn and cachedVCOStealFn:IsValid()), true)
+    end)
+end)
 
 -- RegisterKeyBind(Key.F8, function()
 --     ExecuteInGameThread(function()

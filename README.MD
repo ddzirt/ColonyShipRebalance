@@ -107,7 +107,7 @@ Most changes are exposed in config.ini and can be tuned.
 
 ### Mastermind (Heroic)
 
-* Additionally grants +15% `Skill XP` gain.
+* Additionally grants +25% `Skill XP` gain.
 
 ### Gifted (Heroic)(Works partically, +1 to stats is yet to work)
 
