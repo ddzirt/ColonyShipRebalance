@@ -49,7 +49,6 @@ local descriptions       = nil
 local descriptionsCache  = nil  -- Cache for loaded descriptions(probably not needed but we'll see) TODO: Review this
 local configLoaded       = false
 local BionicCharIDs      = {}   -- set of charIDs that have Bionic feat
-local ItsBpLibHooked     = false
 local isFunctionsCached  = false
 local cachedPlotCDO      = nil
 local cachedVCOStealFn   = nil
