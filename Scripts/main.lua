@@ -369,20 +369,20 @@ local function CacheFunctions()
             local ok2, fullName = pcall(function() return obj:GetFullName() end)
             if ok2 and fullName:find("HumanRpgCharacter") then
                 cachedCalcFn = obj
-                print("[Cache] CalcFn: " .. fullName)
+                Log("[Cache] CalcFn: " .. fullName, true)
             end
         end
 
         if name == "VCO_Steal" and not cachedVCOStealFn then
             cachedVCOStealFn = obj
             local ok2, fullName = pcall(function() return obj:GetFullName() end)
-            if ok2 then print("[Cache] VCOSteal: " .. fullName) end
+            if ok2 then Log("[Cache] VCOSteal: " .. fullName, true) end
         end
 
         if name == "Default__PlotFuncs_C" and not cachedPlotCDO then
             cachedPlotCDO = obj
             local ok2, fullName = pcall(function() return obj:GetFullName() end)
-            if ok2 then print("[Cache] PlotCDO: " .. fullName) end
+            if ok2 then Log("[Cache] PlotCDO: " .. fullName, true) end
         end
     end)
 end
@@ -399,7 +399,7 @@ local function CachePlayerChar()
             if ok2 and id == 1 then
                 cachedPlayerChar = obj
                 local fn = pcall(function()
-                    print("[Cache] PlayerChar: " .. obj:GetFullName() .. " type: " .. tostring(obj))
+                    Log("[Cache] PlayerChar: " .. obj:GetFullName() .. " type: " .. tostring(obj), true)
                 end)
             end
         end
