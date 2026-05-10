@@ -1,6 +1,7 @@
 # --- CONFIGURATION ---
+# Replace with your actual Git repo and game mod directories
 $GitRepoDir = "D:\Work\GameDev\ColonyShip\Rebalance"
-$GameModDir = "D:\SteamLibrary\steamapps\common\Colony Ship RPG\ColonyShipGame\Binaries\Win64\Mods\Rebalance"
+$GameModDir = "D:\SteamLibrary\steamapps\common\Colony Ship RPG\ColonyShipGame\Binaries\Win64\Mods\FeatRebalance"
 
 # List of files/folders to sync (relative to RepoDir)
 $SyncItems = @(
