@@ -16,8 +16,8 @@ This mod requires **UE4SS** (Unreal Engine 4 Scripting System) to function.
 ### 1. Install Mod Files
 
 1. Download and extract this via `CODE` button.
-2. Create a folder with name Rebalance and extract Scripts folder into it.
-3. Move the mod(Rebalance) folder into the UE4SS mods directory:
+2. Create a folder with name `FeatRebalance` and extract `Scripts` folder into it.
+3. Move the mod(`FeatRebalance`) folder into the UE4SS mods directory:
    `Colony Ship/ColonyShip/Binaries/Win64/Mods/`
 
 ### 2. Configure UE4SS-settings.ini (Optional)
@@ -26,13 +26,14 @@ If you are using a custom mod location or need to verify loading:
 
 1. Open `UE4SS-settings.ini` in the `Win64` folder.
 2. Ensure `ModsFolderPath` is correctly targeting your `Mods` directory.
-3. (Optional) Set `GuiConsoleEnabled = 1` to open the console on launch to verify the script initializes.
+3. Open `mods.txt` within the `Mods` directory and add `FeatRebalance` to the list if it's not already there(Needs to look like this: `FeatRebalance : 1`).
+4. (Optional) Set `ConsoleEnabled = 1` to open the console on launch to verify the script initializes.
 
 ## Usage
 
 * Launch the game as normal.
-* The mod will be automatically initialized by the UE4SS loader.
-* If using the UE4SS GUI, you can check the "Mods" tab to ensure the mod is toggled to "Enabled."
+* The mod will be automatically initialized by the UE4SS loader. If not, review step 2.
+* If using the `UE4SS GUI`(`UE4SS-settings.ini` requires `GuiConsoleEnabled = 1` and `GuiConsoleVisible = 1`), you can check the "Mods" tab to ensure the mod is toggled to "Enabled."
 
 ## Feat Rebalance - Balance Changes Summary
 
@@ -40,7 +41,7 @@ Most changes are exposed in config.ini and can be tuned.
 
 ### Current Status:
 
-- Certain feats: Bionic, Gifted are not fully doing what I want them to do
+- Certain feats: Bionic, Gifted. Are working but with limitations: Gifted still needs to grant +1 to stats, Bionic is limited to player character instead of all party members. Skill Monkey was attempted but under current limitations and my lack of experience with particular UE4SS and Unreal Engine 4 modding tools it was not successful and was deffered to need of using C++ instead of Lua.
 
 ### Changes to feats:
 
@@ -59,16 +60,16 @@ Most changes are exposed in config.ini and can be tuned.
 * `HP` above 60%: no bonus.
 * `HP` ≤ 60%: +1 min and max `melee damage`.
 * `HP` ≤ 30%: +2 min and max `melee damage`.
-* At 13 HP or below, +2 bonus(no additional mod bonus). Might add +1 here.
+* At 13 HP or below, +2 bonus(no additional mod bonus).
 
-### Basher (blunt weapons)(Works but needs testing)
+### Basher (blunt weapons)
 
 * Removed vanilla penetration bonus.
 * Added +8% Melee `THC`.
 * Added +20% `Knockdown Critical Chance`.
 * Added +2% `Aimed THC` per Melee Skill Level.
 
-### Butcher (bladed weapons)(Works but needs testing)
+### Butcher (bladed weapons)
 
 * Removed vanilla aimed attack bonus.
 * Added +8% Melee `THC`.
@@ -83,11 +84,11 @@ Most changes are exposed in config.ini and can be tuned.
 
 * Now provides a flat +1 min and +1 max `melee damage`.
 
-### Heavy Hitter(Works but needs testing)
+### Heavy Hitter
 
 * Additionally grants +1% `Critical Strike Chance` per 3 points of `Perception`.
 
-### Bionic(Works, partially, only for Player character now)
+### Bionic
 
 * Now grants +2 `Implants`
 * Configurable via `BIONIC_IMPLANTS` but hard cap at 7(Game maximum)
@@ -109,14 +110,13 @@ Most changes are exposed in config.ini and can be tuned.
 
 * Additionally grants +25% `Skill XP` gain.
 
-### Gifted (Heroic)(Works partically, +1 to stats is yet to work)
+### Gifted (Heroic)
 
-* Grants +4 to stats(+1 to original)
 * Additionally grants +15% `Skill XP` gain.
 
 ### Healing Factor (Heroic)
 
-* HP regeneration per turn is now `floor(character level / 3)`.
+* HP regeneration per turn is now `HF_BASE_REGEN + floor(level / HF_REGEN_PER_LEVELS)`, defaulting to `3 + floor(level / 3)`.
 
 ### Juggernaut (Heroic)
 
