@@ -15,7 +15,7 @@ return function(cfg)
             " Armor Handling.",
 
         ["/Game/Gameplay/Feats/F_Berserker.F_Berserker_C"] =
-            "Melee: Attack cost -1, Aimed attacks are permanently disabled, " ..
+            "Melee: Attack cost -1, No aimed attacks, " ..
             "HP <= " .. math.floor(cfg("BERSERK_MID_HP_PCT", 0.50) * 100) .. "%: +1 Melee DMG. " ..
             "HP <= " .. math.floor(cfg("BERSERK_LOW_HP_PCT", 0.25) * 100) .. "%: +2 Melee DMG. " ..
             "HP <=13: +2 Melee DMG.",
@@ -31,14 +31,14 @@ return function(cfg)
             cfg("BUTCHER_PEN_PER_LEVEL", 2) .. "% penetration per Melee skill level.",
 
         ["/Game/Gameplay/Feats/F_H_Juggernaut.F_H_Juggernaut_C"] =
-            "Knockdowns become Stuns, melee damage +2, Armor skill gain +100%,  +1 Natural DR. HP <= " ..
-            math.floor(cfg("JUGG_MID_HP_PCT", 0.50) * 100) .. "%: +2 Natural DR. HP <= " ..
-            math.floor(cfg("JUGG_LOW_HP_PCT", 0.25) * 100) .. "%: +3 Natural DR. HP <=13: +4 DR.",
+            "No Knockdowns, melee damage +2, Armor skill gain +100%,  +1 DR. HP <= " ..
+            math.floor(cfg("JUGG_MID_HP_PCT", 0.50) * 100) .. "%: +2 DR. HP <= " ..
+            math.floor(cfg("JUGG_LOW_HP_PCT", 0.25) * 100) .. "%: +3 DR. HP <=13: +4 DR.",
 
         ["/Game/Gameplay/Feats/F_Educated.F_Educated_C"] =
-            "+1 Tagged Skill, +25% Extra Experience. " ..
+            "+1 Tagged Skill, +25% Extra Experience, " ..
             " +" .. cfg("EDUCATED_SXP_BONUS", 5) .. "% Skill XP gain." ..
-            ":req INT >= " .. cfg("EDUCATED_INT_MIN", 6)
+            ":req REQ INT " .. cfg("EDUCATED_INT_MIN", 6)
         ,
 
         ["/Game/Gameplay/Feats/F_H_Mastermind.F_H_Mastermind_C"] =
@@ -70,9 +70,13 @@ return function(cfg)
 
         ["/Game/Gameplay/Feats/F_ToughBastard.F_ToughBastard_C"] =
             "HP +10, enemy's critical damage is halved. " ..
-            ":req CON >= " .. cfg("TB_CON", 6),
+            ":req REQ CON " .. cfg("TB_CON", 6),
 
         ["/Game/Gameplay/Feats/F_Bionic.F_Bionic_C"] =
-            "Max Implants +" .. cfg("BIONIC_IMPLANTS", 1) .. ".",
+            "Max Implants +" .. cfg("BIONIC_IMPLANTS", 2) .. ".",
+
+        ["/Game/Gameplay/Feats/F_MasterTrader.F_MasterTrader_C"] =
+            "Auto-Success on haggling checks, unique deals, 25% discount when buying, +1 Initial Disposition." ..
+            " :req REQ CHA " .. cfg("MASTER_TRADER_CHA", 6) .. ".",
     }
 end
